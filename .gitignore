@@ -1,0 +1,55 @@
+# Cargo build and artifacts
+/target
+Cargo.lock
+**/*.rs.bk
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+
+# OS specific
+.DS_Store
+Thumbs.db
+.clover/
+
+# Debug and profiling
+*.pdb
+*.prof
+perf.data
+perf.data.old
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Dependencies and downloads
+.cargo/
+vendor/
+
+# Build output
+dist/
+build/
+
+# IDE cache
+.project
+.classpath
