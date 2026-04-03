@@ -1,5 +1,6 @@
 use axum::Router;
 use tokio::net::TcpListener;
+use tower_http::cors::{CorsLayer, Any};
 mod routes;
 mod controllers;
 mod services;
@@ -12,6 +13,11 @@ async fn main() {
 
     let app = Router::new()
         .merge(routes::transaction_routes::routes())
+        .merge(routes::account_routes::routes())
+        .layer(CorsLayer::new()
+            .allow_origin(Any)
+            .allow_methods(Any)
+            .allow_headers(Any))
         .with_state(pool);
 
     let listener = TcpListener::bind("0.0.0.0:3000")
