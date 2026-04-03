@@ -4,6 +4,7 @@ use chrono::NaiveDateTime;
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct Transaction {
     pub id: i64,
     pub account_id: i64,
