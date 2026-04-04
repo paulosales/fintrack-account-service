@@ -14,6 +14,7 @@ pub struct ListParams {
     account_id: Option<i64>,
     transaction_type_id: Option<i64>,
     category_id: Option<i64>,
+    description: Option<String>,
     page: Option<u32>,
     page_size: Option<u32>,
 }
@@ -62,12 +63,21 @@ pub async fn list_transactions(
 ) -> impl IntoResponse {
     let page = normalize_page(params.page);
     let page_size = normalize_page_size(params.page_size);
+    let description = params.description.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
 
     match transaction_service::list_transactions(
         &pool,
         params.account_id,
         params.transaction_type_id,
         params.category_id,
+        description,
         page,
         page_size,
     )
@@ -243,6 +253,7 @@ mod tests {
         assert_eq!(params.account_id, Some(123));
         assert_eq!(params.transaction_type_id, None);
         assert_eq!(params.category_id, None);
+        assert_eq!(params.description, None);
         assert_eq!(params.page, None);
         assert_eq!(params.page_size, None);
 
@@ -251,6 +262,7 @@ mod tests {
         assert_eq!(params.account_id, Some(123));
         assert_eq!(params.transaction_type_id, Some(2));
         assert_eq!(params.category_id, None);
+        assert_eq!(params.description, None);
         assert_eq!(params.page, None);
         assert_eq!(params.page_size, None);
 
@@ -259,16 +271,22 @@ mod tests {
         assert_eq!(params.account_id, Some(123));
         assert_eq!(params.transaction_type_id, Some(2));
         assert_eq!(params.category_id, Some(5));
+        assert_eq!(params.description, None);
 
         let params: ListParams = serde_qs::from_str("page=3&page_size=20&category_id=5").unwrap();
         assert_eq!(params.page, Some(3));
         assert_eq!(params.page_size, Some(20));
         assert_eq!(params.category_id, Some(5));
+        assert_eq!(params.description, None);
+
+        let params: ListParams = serde_qs::from_str("description=Coffee%20Shop").unwrap();
+        assert_eq!(params.description.as_deref(), Some("Coffee Shop"));
 
         let params: ListParams = serde_qs::from_str("").unwrap();
         assert_eq!(params.account_id, None);
         assert_eq!(params.transaction_type_id, None);
         assert_eq!(params.category_id, None);
+        assert_eq!(params.description, None);
         assert_eq!(params.page, None);
         assert_eq!(params.page_size, None);
     }

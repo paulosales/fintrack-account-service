@@ -43,6 +43,7 @@ pub async fn list_transactions(
     account_id: Option<i64>,
     transaction_type_id: Option<i64>,
     category_id: Option<i64>,
+    description: Option<String>,
     page: u32,
     page_size: u32,
 ) -> Result<(Vec<Transaction>, u64), anyhow::Error> {
@@ -59,6 +60,7 @@ pub async fn list_transactions(
                 AND tc_filter.category_id = ?
             )
         )
+        AND (? IS NULL OR LOWER(t.description) LIKE CONCAT('%', LOWER(?), '%'))
         "#,
     )
     .bind(account_id)
@@ -67,6 +69,8 @@ pub async fn list_transactions(
     .bind(transaction_type_id)
     .bind(category_id)
     .bind(category_id)
+    .bind(description.clone())
+    .bind(description.clone())
     .fetch_one(pool)
     .await?;
 
@@ -100,6 +104,7 @@ pub async fn list_transactions(
                 AND tc_filter.category_id = ?
             )
         )
+        AND (? IS NULL OR LOWER(t.description) LIKE CONCAT('%', LOWER(?), '%'))
         GROUP BY
             t.id,
             t.account_id,
@@ -120,6 +125,8 @@ pub async fn list_transactions(
     .bind(transaction_type_id)
     .bind(category_id)
     .bind(category_id)
+    .bind(description.clone())
+    .bind(description)
     .bind(page_size as i64)
     .bind(offset)
     .fetch_all(pool)
@@ -413,6 +420,25 @@ mod tests {
 
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].categories.as_deref(), Some("Groceries, Home"));
+    }
+
+    #[tokio::test]
+    async fn test_list_transactions_with_description_filter() {
+        let all_transactions = vec![
+            create_test_transaction(1, 123, 100.50, "Coffee Shop"),
+            create_test_transaction(2, 456, -25.00, "Monthly Rent"),
+            create_test_transaction(3, 789, -10.00, "COFFEE beans"),
+        ];
+
+        let description = "coffee".to_lowercase();
+        let filtered: Vec<_> = all_transactions
+            .into_iter()
+            .filter(|transaction| transaction.description.to_lowercase().contains(&description))
+            .collect();
+
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0].description, "Coffee Shop");
+        assert_eq!(filtered[1].description, "COFFEE beans");
     }
 
     #[test]
