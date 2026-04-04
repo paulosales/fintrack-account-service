@@ -9,6 +9,7 @@ pub struct Transaction {
     pub account_id: i64,
     pub transaction_type_id: i64,
     pub transaction_type_name: Option<String>,
+    pub category_ids: Option<String>,
     pub categories: Option<String>,
     pub datetime: NaiveDateTime,
     pub amount: f64,
@@ -32,6 +33,7 @@ mod tests {
             account_id: 123,
             transaction_type_id: 2,
             transaction_type_name: Some("Expense".to_string()),
+            category_ids: Some("1,2".to_string()),
             categories: Some("Groceries, Home".to_string()),
             datetime,
             amount: 150.50,
@@ -53,6 +55,7 @@ mod tests {
             transaction.transaction_type_name,
             deserialized.transaction_type_name
         );
+        assert_eq!(transaction.category_ids, deserialized.category_ids);
         assert_eq!(transaction.categories, deserialized.categories);
         assert_eq!(transaction.datetime, deserialized.datetime);
         assert_eq!(transaction.amount, deserialized.amount);
@@ -71,6 +74,7 @@ mod tests {
             account_id: 456,
             transaction_type_id: 1,
             transaction_type_name: Some("Income".to_string()),
+            category_ids: None,
             categories: None,
             datetime,
             amount: -50.00,
@@ -97,6 +101,7 @@ mod tests {
             account_id: 123,
             transaction_type_id: 2,
             transaction_type_name: Some("Expense".to_string()),
+            category_ids: Some("1".to_string()),
             categories: Some("Groceries".to_string()),
             datetime,
             amount: 100.00,

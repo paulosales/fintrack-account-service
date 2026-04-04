@@ -1,6 +1,42 @@
 use crate::models::transactions::Transaction;
+use chrono::NaiveDateTime;
 use sqlx::MySqlPool;
 use sqlx::Row;
+use uuid::Uuid;
+
+#[derive(Debug, Clone)]
+pub struct TransactionUpsert {
+    pub account_id: i64,
+    pub transaction_type_id: i64,
+    pub category_ids: Vec<i64>,
+    pub datetime: NaiveDateTime,
+    pub amount: f64,
+    pub description: String,
+    pub note: Option<String>,
+}
+
+async fn sync_transaction_categories(
+    tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
+    transaction_id: i64,
+    category_ids: &[i64],
+) -> Result<(), anyhow::Error> {
+    sqlx::query("DELETE FROM transactions_categories WHERE transaction_id = ?")
+        .bind(transaction_id)
+        .execute(&mut **tx)
+        .await?;
+
+    for category_id in category_ids {
+        sqlx::query(
+            "INSERT INTO transactions_categories (transaction_id, category_id) VALUES (?, ?)",
+        )
+        .bind(transaction_id)
+        .bind(category_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    Ok(())
+}
 
 pub async fn list_transactions(
     pool: &MySqlPool,
@@ -44,6 +80,7 @@ pub async fn list_transactions(
             t.account_id,
             t.transaction_type_id,
             tt.name AS transaction_type_name,
+            GROUP_CONCAT(DISTINCT c.id ORDER BY c.name SEPARATOR ',') AS category_ids,
             GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS categories,
             t.datetime,
             t.amount,
@@ -91,6 +128,181 @@ pub async fn list_transactions(
     Ok((transactions, total_count))
 }
 
+pub async fn get_transaction_by_id(
+    pool: &MySqlPool,
+    transaction_id: i64,
+) -> Result<Option<Transaction>, anyhow::Error> {
+    let transaction = sqlx::query_as::<_, Transaction>(
+        r#"
+        SELECT
+            t.id,
+            t.account_id,
+            t.transaction_type_id,
+            tt.name AS transaction_type_name,
+            GROUP_CONCAT(DISTINCT c.id ORDER BY c.name SEPARATOR ',') AS category_ids,
+            GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS categories,
+            t.datetime,
+            t.amount,
+            t.description,
+            t.note,
+            t.fingerprint
+        FROM transactions t
+        LEFT JOIN transaction_types tt ON t.transaction_type_id = tt.id
+        LEFT JOIN transactions_categories tc ON t.id = tc.transaction_id
+        LEFT JOIN categories c ON tc.category_id = c.id
+        WHERE t.id = ?
+        GROUP BY
+            t.id,
+            t.account_id,
+            t.transaction_type_id,
+            tt.name,
+            t.datetime,
+            t.amount,
+            t.description,
+            t.note,
+            t.fingerprint
+        "#,
+    )
+    .bind(transaction_id)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(transaction)
+}
+
+pub async fn create_transaction(
+    pool: &MySqlPool,
+    payload: TransactionUpsert,
+) -> Result<Transaction, anyhow::Error> {
+    let fingerprint = Uuid::new_v4().to_string();
+    let mut tx = pool.begin().await?;
+    let mut category_ids = payload.category_ids;
+    category_ids.sort_unstable();
+    category_ids.dedup();
+
+    let result = sqlx::query(
+        r#"
+        INSERT INTO transactions (
+            account_id,
+            transaction_type_id,
+            datetime,
+            amount,
+            description,
+            note,
+            fingerprint
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(payload.account_id)
+    .bind(payload.transaction_type_id)
+    .bind(payload.datetime)
+    .bind(payload.amount)
+    .bind(payload.description)
+    .bind(payload.note)
+    .bind(fingerprint)
+    .execute(&mut *tx)
+    .await?;
+
+    let transaction_id = result.last_insert_id() as i64;
+
+    sync_transaction_categories(&mut tx, transaction_id, &category_ids).await?;
+    tx.commit().await?;
+
+    get_transaction_by_id(pool, transaction_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Failed to load created transaction"))
+}
+
+pub async fn update_transaction(
+    pool: &MySqlPool,
+    transaction_id: i64,
+    payload: TransactionUpsert,
+) -> Result<Transaction, anyhow::Error> {
+    let mut tx = pool.begin().await?;
+    let mut category_ids = payload.category_ids;
+    category_ids.sort_unstable();
+    category_ids.dedup();
+
+    let result = sqlx::query(
+        r#"
+        UPDATE transactions
+        SET
+            account_id = ?,
+            transaction_type_id = ?,
+            datetime = ?,
+            amount = ?,
+            description = ?,
+            note = ?
+        WHERE id = ?
+        "#,
+    )
+    .bind(payload.account_id)
+    .bind(payload.transaction_type_id)
+    .bind(payload.datetime)
+    .bind(payload.amount)
+    .bind(payload.description)
+    .bind(payload.note)
+    .bind(transaction_id)
+    .execute(&mut *tx)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        tx.rollback().await?;
+        return Err(anyhow::anyhow!("Transaction not found"));
+    }
+
+    sync_transaction_categories(&mut tx, transaction_id, &category_ids).await?;
+    tx.commit().await?;
+
+    get_transaction_by_id(pool, transaction_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Transaction not found"))
+}
+
+pub async fn delete_transaction(
+    pool: &MySqlPool,
+    transaction_id: i64,
+) -> Result<(), anyhow::Error> {
+    let mut tx = pool.begin().await?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM sub_transactions_categories
+        WHERE sub_transaction_id IN (
+            SELECT id FROM (
+                SELECT id FROM sub_transactions WHERE transaction_id = ?
+            ) AS sub_transaction_ids
+        )
+        "#,
+    )
+    .bind(transaction_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query("DELETE FROM sub_transactions WHERE transaction_id = ?")
+        .bind(transaction_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query("DELETE FROM transactions_categories WHERE transaction_id = ?")
+        .bind(transaction_id)
+        .execute(&mut *tx)
+        .await?;
+
+    let result = sqlx::query("DELETE FROM transactions WHERE id = ?")
+        .bind(transaction_id)
+        .execute(&mut *tx)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        tx.rollback().await?;
+        return Err(anyhow::anyhow!("Transaction not found"));
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,6 +320,7 @@ mod tests {
             account_id,
             transaction_type_id: 1,
             transaction_type_name: Some("Income".to_string()),
+            category_ids: Some("1,2".to_string()),
             categories: Some("Salary, Recurring".to_string()),
             datetime: NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S")
                 .unwrap(),
@@ -225,5 +438,24 @@ mod tests {
         assert_eq!(transaction.amount, -75.25);
         assert!(transaction.amount < 0.0);
         assert_eq!(transaction.description, "Debit transaction");
+    }
+
+    #[test]
+    fn test_transaction_upsert_shape() {
+        let payload = TransactionUpsert {
+            account_id: 1,
+            transaction_type_id: 2,
+            category_ids: vec![3, 4],
+            datetime: NaiveDateTime::parse_from_str("2026-04-04 12:00:00", "%Y-%m-%d %H:%M:%S")
+                .unwrap(),
+            amount: 25.5,
+            description: "Manual entry".to_string(),
+            note: Some("Created manually".to_string()),
+        };
+
+        assert_eq!(payload.account_id, 1);
+        assert_eq!(payload.transaction_type_id, 2);
+        assert_eq!(payload.category_ids, vec![3, 4]);
+        assert_eq!(payload.amount, 25.5);
     }
 }

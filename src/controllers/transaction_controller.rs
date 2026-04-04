@@ -1,10 +1,11 @@
 use crate::models::pagination::{build_pagination_meta, normalize_page, normalize_page_size};
 use crate::services::transaction_service;
 use axum::{
-    extract::{Query, State},
+    extract::{Json, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
+use chrono::NaiveDateTime;
 use serde::Deserialize;
 use sqlx::MySqlPool;
 
@@ -15,6 +16,44 @@ pub struct ListParams {
     category_id: Option<i64>,
     page: Option<u32>,
     page_size: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionPayload {
+    account_id: i64,
+    transaction_type_id: i64,
+    category_ids: Option<Vec<i64>>,
+    datetime: String,
+    amount: f64,
+    description: String,
+    note: Option<String>,
+}
+
+fn parse_transaction_datetime(value: &str) -> Result<NaiveDateTime, &'static str> {
+    const FORMATS: [&str; 3] = ["%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"];
+
+    for format in FORMATS {
+        if let Ok(parsed) = NaiveDateTime::parse_from_str(value, format) {
+            return Ok(parsed);
+        }
+    }
+
+    Err("Invalid datetime format")
+}
+
+fn map_payload(
+    payload: TransactionPayload,
+) -> Result<transaction_service::TransactionUpsert, &'static str> {
+    Ok(transaction_service::TransactionUpsert {
+        account_id: payload.account_id,
+        transaction_type_id: payload.transaction_type_id,
+        category_ids: payload.category_ids.unwrap_or_default(),
+        datetime: parse_transaction_datetime(&payload.datetime)?,
+        amount: payload.amount,
+        description: payload.description,
+        note: payload.note,
+    })
 }
 
 pub async fn list_transactions(
@@ -55,6 +94,122 @@ pub async fn list_transactions(
     }
 }
 
+pub async fn create_transaction(
+    State(pool): State<MySqlPool>,
+    Json(payload): Json<TransactionPayload>,
+) -> impl IntoResponse {
+    let payload = match map_payload(payload) {
+        Ok(payload) => payload,
+        Err(error) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                axum::Json(serde_json::json!({
+                    "success": false,
+                    "error": error
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    match transaction_service::create_transaction(&pool, payload).await {
+        Ok(transaction) => (
+            StatusCode::CREATED,
+            axum::Json(serde_json::json!({
+                "success": true,
+                "data": transaction
+            })),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({
+                "success": false,
+                "error": format!("Failed to create transaction: {}", error)
+            })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn update_transaction(
+    State(pool): State<MySqlPool>,
+    Path(transaction_id): Path<i64>,
+    Json(payload): Json<TransactionPayload>,
+) -> impl IntoResponse {
+    let payload = match map_payload(payload) {
+        Ok(payload) => payload,
+        Err(error) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                axum::Json(serde_json::json!({
+                    "success": false,
+                    "error": error
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    match transaction_service::update_transaction(&pool, transaction_id, payload).await {
+        Ok(transaction) => (
+            StatusCode::OK,
+            axum::Json(serde_json::json!({
+                "success": true,
+                "data": transaction
+            })),
+        )
+            .into_response(),
+        Err(error) if error.to_string().contains("not found") => (
+            StatusCode::NOT_FOUND,
+            axum::Json(serde_json::json!({
+                "success": false,
+                "error": error.to_string()
+            })),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({
+                "success": false,
+                "error": format!("Failed to update transaction: {}", error)
+            })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn delete_transaction(
+    State(pool): State<MySqlPool>,
+    Path(transaction_id): Path<i64>,
+) -> impl IntoResponse {
+    match transaction_service::delete_transaction(&pool, transaction_id).await {
+        Ok(()) => (
+            StatusCode::OK,
+            axum::Json(serde_json::json!({
+                "success": true
+            })),
+        )
+            .into_response(),
+        Err(error) if error.to_string().contains("not found") => (
+            StatusCode::NOT_FOUND,
+            axum::Json(serde_json::json!({
+                "success": false,
+                "error": error.to_string()
+            })),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({
+                "success": false,
+                "error": format!("Failed to delete transaction: {}", error)
+            })),
+        )
+            .into_response(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -70,6 +225,7 @@ mod tests {
             account_id,
             transaction_type_id: 1,
             transaction_type_name: Some("Income".to_string()),
+            category_ids: Some("1".to_string()),
             categories: Some("Salary".to_string()),
             datetime: NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S")
                 .unwrap(),
@@ -174,5 +330,13 @@ mod tests {
 
         assert_eq!(success_status, StatusCode::OK);
         assert_eq!(error_status, StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn test_parse_transaction_datetime() {
+        assert!(parse_transaction_datetime("2026-04-04T10:30").is_ok());
+        assert!(parse_transaction_datetime("2026-04-04T10:30:45").is_ok());
+        assert!(parse_transaction_datetime("2026-04-04 10:30:45").is_ok());
+        assert!(parse_transaction_datetime("04/04/2026").is_err());
     }
 }
