@@ -10,13 +10,20 @@ use crate::services::transaction_service;
 #[derive(Deserialize)]
 pub struct ListParams {
     account_id: Option<i64>,
+    transaction_type_id: Option<i64>,
 }
 
 pub async fn list_transactions(
     State(pool): State<MySqlPool>,
     Query(params): Query<ListParams>,
 ) -> impl IntoResponse {
-    match transaction_service::list_transactions(&pool, params.account_id).await {
+    match transaction_service::list_transactions(
+        &pool,
+        params.account_id,
+        params.transaction_type_id,
+    )
+    .await
+    {
         Ok(transactions) => (
             StatusCode::OK,
             axum::Json(serde_json::json!({
@@ -46,6 +53,7 @@ mod tests {
             id,
             account_id,
             transaction_type_id: 1,
+            transaction_type_name: Some("Income".to_string()),
             datetime: NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S").unwrap(),
             amount: 100.50,
             description: "Test transaction".to_string(),
@@ -59,9 +67,15 @@ mod tests {
         // Test deserialization of query parameters
         let params: ListParams = serde_qs::from_str("account_id=123").unwrap();
         assert_eq!(params.account_id, Some(123));
+        assert_eq!(params.transaction_type_id, None);
+
+        let params: ListParams = serde_qs::from_str("account_id=123&transaction_type_id=2").unwrap();
+        assert_eq!(params.account_id, Some(123));
+        assert_eq!(params.transaction_type_id, Some(2));
 
         let params: ListParams = serde_qs::from_str("").unwrap();
         assert_eq!(params.account_id, None);
+        assert_eq!(params.transaction_type_id, None);
     }
 
     #[test]

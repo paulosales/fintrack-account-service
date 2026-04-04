@@ -4,34 +4,33 @@ use sqlx::MySqlPool;
 pub async fn list_transactions(
     pool: &MySqlPool,
     account_id: Option<i64>,
+    transaction_type_id: Option<i64>,
 ) -> Result<Vec<Transaction>, anyhow::Error> {
-    let transactions = if let Some(account_id) = account_id {
-        sqlx::query_as::<_, Transaction>(
-            r#"
-            SELECT
-                id, account_id, transaction_type_id, datetime, amount,
-                description, note, fingerprint
-            FROM transactions
-            WHERE account_id = ?
-            ORDER BY datetime DESC
-            "#
-        )
-        .bind(account_id)
-        .fetch_all(pool)
-        .await?
-    } else {
-        sqlx::query_as::<_, Transaction>(
-            r#"
-            SELECT
-                id, account_id, transaction_type_id, datetime, amount,
-                description, note, fingerprint
-            FROM transactions
-            ORDER BY datetime DESC
-            "#
-        )
-        .fetch_all(pool)
-        .await?
-    };
+    let transactions = sqlx::query_as::<_, Transaction>(
+        r#"
+        SELECT
+            t.id,
+            t.account_id,
+            t.transaction_type_id,
+            tt.name AS transaction_type_name,
+            t.datetime,
+            t.amount,
+            t.description,
+            t.note,
+            t.fingerprint
+        FROM transactions t
+        LEFT JOIN transaction_types tt ON t.transaction_type_id = tt.id
+        WHERE (? IS NULL OR t.account_id = ?)
+        AND (? IS NULL OR t.transaction_type_id = ?)
+        ORDER BY t.datetime DESC
+        "#
+    )
+    .bind(account_id)
+    .bind(account_id)
+        .bind(transaction_type_id)
+        .bind(transaction_type_id)
+    .fetch_all(pool)
+    .await?;
 
     Ok(transactions)
 }
@@ -47,6 +46,7 @@ mod tests {
             id,
             account_id,
             transaction_type_id: 1,
+            transaction_type_name: Some("Income".to_string()),
             datetime: NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S").unwrap(),
             amount,
             description: description.to_string(),
@@ -92,6 +92,31 @@ mod tests {
         assert_eq!(filtered[1].description, "Deposit 2");
     }
 
+    #[tokio::test]
+    async fn test_list_transactions_with_transaction_type_filter() {
+        let mut income_transaction = create_test_transaction(1, 123, 100.50, "Deposit 1");
+        income_transaction.transaction_type_id = 1;
+        income_transaction.transaction_type_name = Some("Income".to_string());
+
+        let mut expense_transaction = create_test_transaction(2, 456, -25.00, "Withdrawal");
+        expense_transaction.transaction_type_id = 2;
+        expense_transaction.transaction_type_name = Some("Expense".to_string());
+
+        let all_transactions = vec![
+            income_transaction,
+            expense_transaction,
+        ];
+
+        let transaction_type_id = 1;
+        let filtered: Vec<_> = all_transactions
+            .into_iter()
+            .filter(|t| t.transaction_type_id == transaction_type_id)
+            .collect();
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].transaction_type_name.as_deref(), Some("Income"));
+    }
+
     #[test]
     fn test_transaction_creation() {
         let transaction = create_test_transaction(1, 123, 100.50, "Test transaction");
@@ -101,6 +126,7 @@ mod tests {
         assert_eq!(transaction.amount, 100.50);
         assert_eq!(transaction.description, "Test transaction");
         assert_eq!(transaction.transaction_type_id, 1);
+        assert_eq!(transaction.transaction_type_name.as_deref(), Some("Income"));
         assert!(transaction.note.is_some());
         assert_eq!(transaction.note.as_ref().unwrap(), "Test note");
         assert_eq!(transaction.fingerprint, "fp1");
