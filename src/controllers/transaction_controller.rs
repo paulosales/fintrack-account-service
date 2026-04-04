@@ -1,3 +1,4 @@
+use crate::models::pagination::{build_pagination_meta, normalize_page, normalize_page_size};
 use crate::services::transaction_service;
 use axum::{
     extract::{Query, State},
@@ -12,26 +13,34 @@ pub struct ListParams {
     account_id: Option<i64>,
     transaction_type_id: Option<i64>,
     category_id: Option<i64>,
+    page: Option<u32>,
+    page_size: Option<u32>,
 }
 
 pub async fn list_transactions(
     State(pool): State<MySqlPool>,
     Query(params): Query<ListParams>,
 ) -> impl IntoResponse {
+    let page = normalize_page(params.page);
+    let page_size = normalize_page_size(params.page_size);
+
     match transaction_service::list_transactions(
         &pool,
         params.account_id,
         params.transaction_type_id,
         params.category_id,
+        page,
+        page_size,
     )
     .await
     {
-        Ok(transactions) => (
+        Ok((transactions, total_count)) => (
             StatusCode::OK,
             axum::Json(serde_json::json!({
                 "success": true,
                 "data": transactions,
-                "count": transactions.len()
+                "count": transactions.len(),
+                "pagination": build_pagination_meta(page, page_size, total_count)
             })),
         )
             .into_response(),
@@ -78,12 +87,16 @@ mod tests {
         assert_eq!(params.account_id, Some(123));
         assert_eq!(params.transaction_type_id, None);
         assert_eq!(params.category_id, None);
+        assert_eq!(params.page, None);
+        assert_eq!(params.page_size, None);
 
         let params: ListParams =
             serde_qs::from_str("account_id=123&transaction_type_id=2").unwrap();
         assert_eq!(params.account_id, Some(123));
         assert_eq!(params.transaction_type_id, Some(2));
         assert_eq!(params.category_id, None);
+        assert_eq!(params.page, None);
+        assert_eq!(params.page_size, None);
 
         let params: ListParams =
             serde_qs::from_str("account_id=123&transaction_type_id=2&category_id=5").unwrap();
@@ -91,10 +104,17 @@ mod tests {
         assert_eq!(params.transaction_type_id, Some(2));
         assert_eq!(params.category_id, Some(5));
 
+        let params: ListParams = serde_qs::from_str("page=3&page_size=20&category_id=5").unwrap();
+        assert_eq!(params.page, Some(3));
+        assert_eq!(params.page_size, Some(20));
+        assert_eq!(params.category_id, Some(5));
+
         let params: ListParams = serde_qs::from_str("").unwrap();
         assert_eq!(params.account_id, None);
         assert_eq!(params.transaction_type_id, None);
         assert_eq!(params.category_id, None);
+        assert_eq!(params.page, None);
+        assert_eq!(params.page_size, None);
     }
 
     #[test]
@@ -109,13 +129,20 @@ mod tests {
         let expected_json = serde_json::json!({
             "success": true,
             "data": transactions,
-            "count": 2
+            "count": 2,
+            "pagination": {
+                "page": 1,
+                "pageSize": 10,
+                "totalCount": 2,
+                "totalPages": 1
+            }
         });
 
         // Verify the JSON structure
         assert_eq!(expected_json["success"], true);
         assert_eq!(expected_json["count"], 2);
         assert!(expected_json["data"].is_array());
+        assert_eq!(expected_json["pagination"]["page"], 1);
     }
 
     #[test]

@@ -1,12 +1,42 @@
 use crate::models::transactions::Transaction;
 use sqlx::MySqlPool;
+use sqlx::Row;
 
 pub async fn list_transactions(
     pool: &MySqlPool,
     account_id: Option<i64>,
     transaction_type_id: Option<i64>,
     category_id: Option<i64>,
-) -> Result<Vec<Transaction>, anyhow::Error> {
+    page: u32,
+    page_size: u32,
+) -> Result<(Vec<Transaction>, u64), anyhow::Error> {
+    let total_row = sqlx::query(
+        r#"
+        SELECT COUNT(*) AS total_count
+        FROM transactions t
+        WHERE (? IS NULL OR t.account_id = ?)
+        AND (? IS NULL OR t.transaction_type_id = ?)
+        AND (? IS NULL OR EXISTS (
+                SELECT 1
+                FROM transactions_categories tc_filter
+                WHERE tc_filter.transaction_id = t.id
+                AND tc_filter.category_id = ?
+            )
+        )
+        "#,
+    )
+    .bind(account_id)
+    .bind(account_id)
+    .bind(transaction_type_id)
+    .bind(transaction_type_id)
+    .bind(category_id)
+    .bind(category_id)
+    .fetch_one(pool)
+    .await?;
+
+    let total_count = total_row.try_get::<i64, _>("total_count")? as u64;
+    let offset = ((page - 1) * page_size) as i64;
+
     let transactions = sqlx::query_as::<_, Transaction>(
         r#"
         SELECT
@@ -44,6 +74,7 @@ pub async fn list_transactions(
             t.note,
             t.fingerprint
         ORDER BY t.datetime DESC
+        LIMIT ? OFFSET ?
         "#,
     )
     .bind(account_id)
@@ -52,10 +83,12 @@ pub async fn list_transactions(
     .bind(transaction_type_id)
     .bind(category_id)
     .bind(category_id)
+    .bind(page_size as i64)
+    .bind(offset)
     .fetch_all(pool)
     .await?;
 
-    Ok(transactions)
+    Ok((transactions, total_count))
 }
 
 #[cfg(test)]
