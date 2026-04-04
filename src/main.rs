@@ -15,6 +15,7 @@ async fn main() {
         .merge(routes::transaction_routes::routes())
         .merge(routes::account_routes::routes())
         .merge(routes::transaction_type_routes::routes())
+        .merge(routes::category_routes::routes())
         .layer(CorsLayer::new()
             .allow_origin(Any)
             .allow_methods(Any)

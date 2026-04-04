@@ -11,6 +11,7 @@ use crate::services::transaction_service;
 pub struct ListParams {
     account_id: Option<i64>,
     transaction_type_id: Option<i64>,
+    category_id: Option<i64>,
 }
 
 pub async fn list_transactions(
@@ -21,6 +22,7 @@ pub async fn list_transactions(
         &pool,
         params.account_id,
         params.transaction_type_id,
+        params.category_id,
     )
     .await
     {
@@ -54,6 +56,7 @@ mod tests {
             account_id,
             transaction_type_id: 1,
             transaction_type_name: Some("Income".to_string()),
+            categories: Some("Salary".to_string()),
             datetime: NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S").unwrap(),
             amount: 100.50,
             description: "Test transaction".to_string(),
@@ -68,14 +71,22 @@ mod tests {
         let params: ListParams = serde_qs::from_str("account_id=123").unwrap();
         assert_eq!(params.account_id, Some(123));
         assert_eq!(params.transaction_type_id, None);
+        assert_eq!(params.category_id, None);
 
         let params: ListParams = serde_qs::from_str("account_id=123&transaction_type_id=2").unwrap();
         assert_eq!(params.account_id, Some(123));
         assert_eq!(params.transaction_type_id, Some(2));
+        assert_eq!(params.category_id, None);
+
+        let params: ListParams = serde_qs::from_str("account_id=123&transaction_type_id=2&category_id=5").unwrap();
+        assert_eq!(params.account_id, Some(123));
+        assert_eq!(params.transaction_type_id, Some(2));
+        assert_eq!(params.category_id, Some(5));
 
         let params: ListParams = serde_qs::from_str("").unwrap();
         assert_eq!(params.account_id, None);
         assert_eq!(params.transaction_type_id, None);
+        assert_eq!(params.category_id, None);
     }
 
     #[test]
