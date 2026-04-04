@@ -1,13 +1,15 @@
 use crate::models::transaction_types::TransactionType;
 use sqlx::MySqlPool;
 
-pub async fn list_transaction_types(pool: &MySqlPool) -> Result<Vec<TransactionType>, anyhow::Error> {
+pub async fn list_transaction_types(
+    pool: &MySqlPool,
+) -> Result<Vec<TransactionType>, anyhow::Error> {
     let transaction_types = sqlx::query_as::<_, TransactionType>(
         r#"
         SELECT id, code, name
         FROM transaction_types
         ORDER BY name ASC
-        "#
+        "#,
     )
     .fetch_all(pool)
     .await?;

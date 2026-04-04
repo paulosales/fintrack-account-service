@@ -1,8 +1,4 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use sqlx::MySqlPool;
 
 use crate::services::transaction_type_service;

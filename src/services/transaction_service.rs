@@ -1,4 +1,4 @@
-use crate::models::transactions::{Transaction};
+use crate::models::transactions::Transaction;
 use sqlx::MySqlPool;
 
 pub async fn list_transactions(
@@ -44,7 +44,7 @@ pub async fn list_transactions(
             t.note,
             t.fingerprint
         ORDER BY t.datetime DESC
-        "#
+        "#,
     )
     .bind(account_id)
     .bind(account_id)
@@ -64,14 +64,20 @@ mod tests {
     use chrono::NaiveDateTime;
 
     // Helper function to create test transactions
-    fn create_test_transaction(id: i64, account_id: i64, amount: f64, description: &str) -> Transaction {
+    fn create_test_transaction(
+        id: i64,
+        account_id: i64,
+        amount: f64,
+        description: &str,
+    ) -> Transaction {
         Transaction {
             id,
             account_id,
             transaction_type_id: 1,
             transaction_type_name: Some("Income".to_string()),
             categories: Some("Salary, Recurring".to_string()),
-            datetime: NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S").unwrap(),
+            datetime: NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S")
+                .unwrap(),
             amount,
             description: description.to_string(),
             note: Some("Test note".to_string()),
@@ -106,7 +112,8 @@ mod tests {
 
         // Simulate filtering by account_id
         let account_id = 123;
-        let filtered: Vec<_> = all_transactions.into_iter()
+        let filtered: Vec<_> = all_transactions
+            .into_iter()
             .filter(|t| t.account_id == account_id)
             .collect();
 
@@ -126,10 +133,7 @@ mod tests {
         expense_transaction.transaction_type_id = 2;
         expense_transaction.transaction_type_name = Some("Expense".to_string());
 
-        let all_transactions = vec![
-            income_transaction,
-            expense_transaction,
-        ];
+        let all_transactions = vec![income_transaction, expense_transaction];
 
         let transaction_type_id = 1;
         let filtered: Vec<_> = all_transactions
@@ -153,7 +157,12 @@ mod tests {
 
         let filtered: Vec<_> = all_transactions
             .into_iter()
-            .filter(|t| t.categories.as_deref().unwrap_or_default().contains("Groceries"))
+            .filter(|t| {
+                t.categories
+                    .as_deref()
+                    .unwrap_or_default()
+                    .contains("Groceries")
+            })
             .collect();
 
         assert_eq!(filtered.len(), 1);

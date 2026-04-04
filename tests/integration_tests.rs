@@ -35,7 +35,7 @@ mod integration_tests {
     fn test_transaction_model_integration() {
         // Test basic data structures that would be used across the application
         use chrono::NaiveDateTime;
-        use serde::{Serialize, Deserialize};
+        use serde::{Deserialize, Serialize};
 
         #[derive(Debug, Clone, Serialize, Deserialize)]
         struct TestTransaction {
@@ -49,7 +49,8 @@ mod integration_tests {
             pub fingerprint: String,
         }
 
-        let datetime = NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        let datetime =
+            NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
 
         let transaction = TestTransaction {
             id: 1,

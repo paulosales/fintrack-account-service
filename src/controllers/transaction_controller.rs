@@ -1,11 +1,11 @@
-use axum::{
-    extract::{State, Query},
-    response::IntoResponse,
-    http::StatusCode,
-};
-use sqlx::MySqlPool;
-use serde::Deserialize;
 use crate::services::transaction_service;
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use serde::Deserialize;
+use sqlx::MySqlPool;
 
 #[derive(Deserialize)]
 pub struct ListParams {
@@ -32,15 +32,17 @@ pub async fn list_transactions(
                 "success": true,
                 "data": transactions,
                 "count": transactions.len()
-            }))
-        ).into_response(),
+            })),
+        )
+            .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             axum::Json(serde_json::json!({
                 "success": false,
                 "error": format!("Failed to fetch transactions: {}", e)
-            }))
-        ).into_response(),
+            })),
+        )
+            .into_response(),
     }
 }
 
@@ -50,14 +52,18 @@ mod tests {
     use chrono::NaiveDateTime;
 
     // Mock transaction for testing
-    fn create_mock_transaction(id: i64, account_id: i64) -> crate::models::transactions::Transaction {
+    fn create_mock_transaction(
+        id: i64,
+        account_id: i64,
+    ) -> crate::models::transactions::Transaction {
         crate::models::transactions::Transaction {
             id,
             account_id,
             transaction_type_id: 1,
             transaction_type_name: Some("Income".to_string()),
             categories: Some("Salary".to_string()),
-            datetime: NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S").unwrap(),
+            datetime: NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S")
+                .unwrap(),
             amount: 100.50,
             description: "Test transaction".to_string(),
             note: Some("Test note".to_string()),
@@ -73,12 +79,14 @@ mod tests {
         assert_eq!(params.transaction_type_id, None);
         assert_eq!(params.category_id, None);
 
-        let params: ListParams = serde_qs::from_str("account_id=123&transaction_type_id=2").unwrap();
+        let params: ListParams =
+            serde_qs::from_str("account_id=123&transaction_type_id=2").unwrap();
         assert_eq!(params.account_id, Some(123));
         assert_eq!(params.transaction_type_id, Some(2));
         assert_eq!(params.category_id, None);
 
-        let params: ListParams = serde_qs::from_str("account_id=123&transaction_type_id=2&category_id=5").unwrap();
+        let params: ListParams =
+            serde_qs::from_str("account_id=123&transaction_type_id=2&category_id=5").unwrap();
         assert_eq!(params.account_id, Some(123));
         assert_eq!(params.transaction_type_id, Some(2));
         assert_eq!(params.category_id, Some(5));
@@ -121,8 +129,14 @@ mod tests {
         });
 
         assert_eq!(expected_json["success"], false);
-        assert!(expected_json["error"].as_str().unwrap().contains("Failed to fetch transactions"));
-        assert!(expected_json["error"].as_str().unwrap().contains(error_message));
+        assert!(expected_json["error"]
+            .as_str()
+            .unwrap()
+            .contains("Failed to fetch transactions"));
+        assert!(expected_json["error"]
+            .as_str()
+            .unwrap()
+            .contains(error_message));
     }
 
     #[test]

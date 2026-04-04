@@ -1,14 +1,8 @@
-use axum::{
-    extract::State,
-    response::IntoResponse,
-    http::StatusCode,
-};
-use sqlx::MySqlPool;
 use crate::services::account_service;
+use axum::{extract::State, http::StatusCode, response::IntoResponse};
+use sqlx::MySqlPool;
 
-pub async fn list_accounts(
-    State(pool): State<MySqlPool>,
-) -> impl IntoResponse {
+pub async fn list_accounts(State(pool): State<MySqlPool>) -> impl IntoResponse {
     match account_service::list_accounts(&pool).await {
         Ok(accounts) => (
             StatusCode::OK,
@@ -16,15 +10,17 @@ pub async fn list_accounts(
                 "success": true,
                 "data": accounts,
                 "count": accounts.len()
-            }))
-        ).into_response(),
+            })),
+        )
+            .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             axum::Json(serde_json::json!({
                 "success": false,
                 "error": format!("Failed to fetch accounts: {}", e)
-            }))
-        ).into_response(),
+            })),
+        )
+            .into_response(),
     }
 }
 

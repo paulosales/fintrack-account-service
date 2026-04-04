@@ -1,5 +1,5 @@
-use sqlx::MySqlPool;
 use dotenv::dotenv;
+use sqlx::MySqlPool;
 use std::env;
 
 pub async fn get_pool() -> MySqlPool {
@@ -60,7 +60,10 @@ mod tests {
         ];
 
         for url in test_urls {
-            assert!(url.starts_with("mysql://"), "URL should start with mysql://");
+            assert!(
+                url.starts_with("mysql://"),
+                "URL should start with mysql://"
+            );
             assert!(url.contains("@"), "URL should contain @ separator");
             assert!(url.contains("/"), "URL should contain database path");
         }

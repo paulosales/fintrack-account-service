@@ -1,6 +1,5 @@
-
-use serde::{Deserialize, Serialize};
 use chrono::NaiveDateTime;
+use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -25,8 +24,8 @@ mod tests {
 
     #[test]
     fn test_transaction_serialization() {
-        let datetime = NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S")
-            .unwrap();
+        let datetime =
+            NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
 
         let transaction = Transaction {
             id: 1,
@@ -46,8 +45,14 @@ mod tests {
 
         assert_eq!(transaction.id, deserialized.id);
         assert_eq!(transaction.account_id, deserialized.account_id);
-        assert_eq!(transaction.transaction_type_id, deserialized.transaction_type_id);
-        assert_eq!(transaction.transaction_type_name, deserialized.transaction_type_name);
+        assert_eq!(
+            transaction.transaction_type_id,
+            deserialized.transaction_type_id
+        );
+        assert_eq!(
+            transaction.transaction_type_name,
+            deserialized.transaction_type_name
+        );
         assert_eq!(transaction.categories, deserialized.categories);
         assert_eq!(transaction.datetime, deserialized.datetime);
         assert_eq!(transaction.amount, deserialized.amount);
@@ -58,8 +63,8 @@ mod tests {
 
     #[test]
     fn test_transaction_serialization_without_note() {
-        let datetime = NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S")
-            .unwrap();
+        let datetime =
+            NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
 
         let transaction = Transaction {
             id: 2,
@@ -84,8 +89,8 @@ mod tests {
 
     #[test]
     fn test_transaction_debug_format() {
-        let datetime = NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S")
-            .unwrap();
+        let datetime =
+            NaiveDateTime::parse_from_str("2024-01-15 10:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
 
         let transaction = Transaction {
             id: 1,

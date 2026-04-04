@@ -8,7 +8,7 @@ pub async fn list_accounts(pool: &MySqlPool) -> Result<Vec<Account>, anyhow::Err
             id, code, name, account_type_id
         FROM accounts
         ORDER BY code ASC
-        "#
+        "#,
     )
     .fetch_all(pool)
     .await?;

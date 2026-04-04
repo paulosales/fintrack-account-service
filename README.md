@@ -66,6 +66,30 @@ cargo run
 
 The server will start on `http://localhost:3000`.
 
+## Formatting
+
+This backend uses `rustfmt` as its code formatter.
+
+### Install the Formatter
+
+```bash
+rustup component add rustfmt
+```
+
+### Format the Code
+
+```bash
+cargo fmt
+```
+
+### Check Formatting in CI or Before Commit
+
+```bash
+cargo fmt --check
+```
+
+VS Code is configured to use `rust-analyzer` as the default formatter for Rust files and to format on save.
+
 ## Testing
 
 ### Prerequisites
