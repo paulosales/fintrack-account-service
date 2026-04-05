@@ -433,7 +433,12 @@ mod tests {
         let description = "coffee".to_lowercase();
         let filtered: Vec<_> = all_transactions
             .into_iter()
-            .filter(|transaction| transaction.description.to_lowercase().contains(&description))
+            .filter(|transaction| {
+                transaction
+                    .description
+                    .to_lowercase()
+                    .contains(&description)
+            })
             .collect();
 
         assert_eq!(filtered.len(), 2);
