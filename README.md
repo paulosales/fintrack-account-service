@@ -19,8 +19,8 @@ Retrieve transactions with optional account filtering.
 
 **Example:**
 ```bash
-curl "http://localhost:3000/transactions"
-curl "http://localhost:3000/transactions?account_id=123"
+curl "http://localhost:3001/transactions"
+curl "http://localhost:3001/transactions?account_id=123"
 ```
 
 **Response:**
@@ -64,7 +64,7 @@ DATABASE_URL=mysql://username:password@localhost:3306/fintrack
 cargo run
 ```
 
-The server will start on `http://localhost:3000`.
+The server will start on `http://localhost:3001`.
 
 ## Formatting
 
