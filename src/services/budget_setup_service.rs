@@ -25,7 +25,9 @@ fn normalize_repeat_configuration(
     }
 
     let Some(repeat_frequency) = payload.repeat_frequency.clone() else {
-        return Err(anyhow!("Repeat frequency is required for repeating budget setups"));
+        return Err(anyhow!(
+            "Repeat frequency is required for repeating budget setups"
+        ));
     };
 
     if !ALLOWED_REPEAT_FREQUENCIES.contains(&repeat_frequency.as_str()) {
@@ -68,7 +70,7 @@ pub async fn list_budget_setups(
             bs.note
         FROM budget_setup bs
         INNER JOIN accounts a ON a.id = bs.account_id
-        ORDER BY bs.date ASC, bs.id ASC
+        ORDER BY DAY(bs.date) ASC, bs.id ASC
         LIMIT ? OFFSET ?
         "#,
     )
