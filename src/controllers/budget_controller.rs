@@ -35,8 +35,8 @@ pub struct BudgetPayload {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BudgetGenerationPayload {
+    start_date: String,
     end_date: String,
-    generate_only_for_future: bool,
 }
 
 fn parse_budget_date(value: &str) -> Result<NaiveDate, &'static str> {
@@ -60,8 +60,8 @@ fn map_generation_payload(
     payload: BudgetGenerationPayload,
 ) -> Result<budget_service::BudgetGenerationPayload, &'static str> {
     Ok(budget_service::BudgetGenerationPayload {
+        start_date: parse_budget_date(&payload.start_date)?,
         end_date: parse_budget_date(&payload.end_date)?,
-        generate_only_for_future: payload.generate_only_for_future,
     })
 }
 
@@ -302,15 +302,12 @@ mod tests {
     #[test]
     fn test_generation_payload_mapping() {
         let payload = map_generation_payload(BudgetGenerationPayload {
+            start_date: "2026-01-01".to_string(),
             end_date: "2026-12-31".to_string(),
-            generate_only_for_future: true,
         })
         .unwrap();
 
-        assert_eq!(
-            payload.end_date,
-            NaiveDate::from_ymd_opt(2026, 12, 31).unwrap()
-        );
-        assert!(payload.generate_only_for_future);
+        assert_eq!(payload.start_date, NaiveDate::from_ymd_opt(2026, 1, 1).unwrap());
+        assert_eq!(payload.end_date, NaiveDate::from_ymd_opt(2026, 12, 31).unwrap());
     }
 }

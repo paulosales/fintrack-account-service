@@ -1,5 +1,5 @@
 use crate::models::budgets::{BudgetMonthTotal, BudgetRecord};
-use chrono::{Days, Local, Months, NaiveDate};
+use chrono::{Days, Months, NaiveDate};
 use sqlx::{FromRow, MySqlPool, Row};
 
 #[derive(Debug, Clone)]
@@ -14,8 +14,8 @@ pub struct BudgetMutationPayload {
 
 #[derive(Debug, Clone)]
 pub struct BudgetGenerationPayload {
+    pub start_date: NaiveDate,
     pub end_date: NaiveDate,
-    pub generate_only_for_future: bool,
 }
 
 #[derive(Debug, Clone, FromRow)]
@@ -82,21 +82,6 @@ fn build_budget_dates(
     }
 
     result
-}
-
-fn filter_budget_dates_for_generation(
-    budget_dates: Vec<NaiveDate>,
-    generate_only_for_future: bool,
-    current_date: NaiveDate,
-) -> Vec<NaiveDate> {
-    if !generate_only_for_future {
-        return budget_dates;
-    }
-
-    budget_dates
-        .into_iter()
-        .filter(|budget_date| *budget_date >= current_date)
-        .collect()
 }
 
 pub async fn list_budget_month_totals(
@@ -384,7 +369,6 @@ pub async fn generate_budgets(
     pool: &MySqlPool,
     payload: BudgetGenerationPayload,
 ) -> Result<u64, anyhow::Error> {
-    let current_date = Local::now().date_naive();
     let setups = sqlx::query_as::<_, BudgetSetupRecord>(
         r#"
         SELECT
@@ -408,6 +392,7 @@ pub async fn generate_budgets(
     let mut created_count = 0_u64;
 
     for setup in setups {
+        // Build all candidate dates for this setup up to the generation end date
         let budget_dates = build_budget_dates(
             setup.date,
             setup.is_repeatle,
@@ -415,11 +400,12 @@ pub async fn generate_budgets(
             setup.end_date,
             payload.end_date,
         );
-        let budget_dates = filter_budget_dates_for_generation(
-            budget_dates,
-            payload.generate_only_for_future,
-            current_date,
-        );
+
+        // Only keep dates within the requested generation window [start_date, end_date]
+        let budget_dates: Vec<NaiveDate> = budget_dates
+            .into_iter()
+            .filter(|d| *d >= payload.start_date && *d <= payload.end_date)
+            .collect();
 
         for budget_date in budget_dates {
             let result = sqlx::query(
@@ -510,42 +496,5 @@ mod tests {
                 NaiveDate::from_ymd_opt(2026, 5, 8).unwrap(),
             ]
         );
-    }
-
-    #[test]
-    fn test_filter_budget_dates_for_generation_with_future_only() {
-        let result = filter_budget_dates_for_generation(
-            vec![
-                NaiveDate::from_ymd_opt(2026, 4, 9).unwrap(),
-                NaiveDate::from_ymd_opt(2026, 4, 10).unwrap(),
-                NaiveDate::from_ymd_opt(2026, 4, 11).unwrap(),
-            ],
-            true,
-            NaiveDate::from_ymd_opt(2026, 4, 10).unwrap(),
-        );
-
-        assert_eq!(
-            result,
-            vec![
-                NaiveDate::from_ymd_opt(2026, 4, 10).unwrap(),
-                NaiveDate::from_ymd_opt(2026, 4, 11).unwrap(),
-            ]
-        );
-    }
-
-    #[test]
-    fn test_filter_budget_dates_for_generation_without_future_only() {
-        let dates = vec![
-            NaiveDate::from_ymd_opt(2026, 4, 9).unwrap(),
-            NaiveDate::from_ymd_opt(2026, 4, 10).unwrap(),
-        ];
-
-        let result = filter_budget_dates_for_generation(
-            dates.clone(),
-            false,
-            NaiveDate::from_ymd_opt(2026, 4, 10).unwrap(),
-        );
-
-        assert_eq!(result, dates);
     }
 }
