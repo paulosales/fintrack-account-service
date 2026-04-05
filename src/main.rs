@@ -27,11 +27,11 @@ async fn main() {
         )
         .with_state(pool);
 
-    let listener = TcpListener::bind("0.0.0.0:3000")
+    let listener = TcpListener::bind("0.0.0.0:3001")
         .await
         .expect("Failed to bind");
 
-    println!("Server running on http://0.0.0.0:3000");
+    println!("Server running on http://0.0.0.0:3001");
 
     axum::serve(listener, app).await.expect("Server error");
 }
