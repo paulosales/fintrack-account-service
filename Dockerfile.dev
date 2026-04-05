@@ -1,10 +1,19 @@
-FROM rust:1.70
+FROM rust:1.94-alpine
 
-RUN apt-get update && \
-    apt-get install -y libssl-dev pkg-config libmysqlclient-dev build-essential && \
-    rm -rf /var/lib/apt/lists/*
+# Install build tools and dependencies (OpenSSL, MySQL client dev headers, curl for rustup)
+RUN apk add --no-cache \
+    bash \
+    ca-certificates \
+    openssl-dev \
+    mysql-client \
+    mysql-dev \
+    build-base \
+    pkgconfig \
+    musl-dev \
+    linux-headers
 
-RUN cargo install cargo-watch --version 8.0.0
+# Use the Rust toolchain provided by the base image (1.94); install cargo-watch
+RUN cargo install cargo-watch
 
 WORKDIR /usr/src/app
 
