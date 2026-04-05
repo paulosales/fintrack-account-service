@@ -1,16 +1,16 @@
 # Production multi-stage Dockerfile for account-service
 
-FROM rust:1.94 as builder
+FROM rust:1.94-alpine as builder
 
-# Install build dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        pkg-config \
-        libssl-dev \
-        libmysqlclient-dev \
-        build-essential \
-        ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+# Install build dependencies on Alpine
+RUN apk add --no-cache \
+    build-base \
+    openssl-dev \
+    mysql-dev \
+    pkgconfig \
+    musl-dev \
+    linux-headers \
+    ca-certificates
 
 WORKDIR /usr/src/app
 
@@ -23,22 +23,21 @@ RUN cargo build --release || true
 COPY . .
 RUN cargo build --release --locked
 
-FROM debian:bookworm-slim
+FROM alpine:3.18
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        libssl3 \
-        libmariadb3 && \
-    rm -rf /var/lib/apt/lists/*
+# Runtime dependencies (MariaDB connector provides MySQL client libs)
+RUN apk add --no-cache \
+    ca-certificates \
+    mariadb-connector-c \
+    openssl
 
 WORKDIR /usr/local/bin
 
 # Copy binary from builder
 COPY --from=builder /usr/src/app/target/release/account-service ./account-service
 
-# Create non-root user
-RUN useradd -m app && chown app:app ./account-service
+# Create non-root user and set ownership
+RUN adduser -D app && chown app:app ./account-service
 USER app
 
 EXPOSE 3001
