@@ -1,5 +1,6 @@
 pub mod account_routes;
 pub mod budget_routes;
+pub mod budget_setup_routes;
 pub mod category_routes;
 pub mod transaction_category_total_routes;
 pub mod transaction_routes;

@@ -13,6 +13,7 @@ async fn main() {
 
     let app = Router::new()
         .merge(routes::transaction_routes::routes())
+        .merge(routes::budget_setup_routes::routes())
         .merge(routes::budget_routes::routes())
         .merge(routes::transaction_category_total_routes::routes())
         .merge(routes::account_routes::routes())

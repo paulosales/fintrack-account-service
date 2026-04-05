@@ -1,4 +1,5 @@
 pub mod accounts;
+pub mod budget_setups;
 pub mod budgets;
 pub mod categories;
 pub mod pagination;
