@@ -6,6 +6,7 @@ Cargo.lock
 # Environment variables
 .env
 .env.local
+.env.docker
 .env.*.local
 
 # IDE and Editor files
