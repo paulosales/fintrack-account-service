@@ -1,3 +1,4 @@
+use crate::models::sub_transactions::SubTransaction;
 use crate::models::transactions::Transaction;
 use chrono::NaiveDateTime;
 use sqlx::MySqlPool;
@@ -304,6 +305,134 @@ pub async fn delete_transaction(
     if result.rows_affected() == 0 {
         tx.rollback().await?;
         return Err(anyhow::anyhow!("Transaction not found"));
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn list_sub_transactions(
+    pool: &MySqlPool,
+    transaction_id: i64,
+) -> Result<Vec<SubTransaction>, anyhow::Error> {
+    let rows = sqlx::query_as::<_, SubTransaction>(
+        r#"
+        SELECT id, transaction_id, product_code, amount, description, note
+        FROM sub_transactions
+        WHERE transaction_id = ?
+        ORDER BY id ASC
+        "#,
+    )
+    .bind(transaction_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows)
+}
+
+pub async fn create_sub_transaction(
+    pool: &MySqlPool,
+    transaction_id: i64,
+    product_code: Option<String>,
+    amount: f64,
+    description: String,
+    note: Option<String>,
+) -> Result<SubTransaction, anyhow::Error> {
+    let mut tx = pool.begin().await?;
+
+    let result = sqlx::query(
+        r#"
+        INSERT INTO sub_transactions (transaction_id, product_code, amount, description, note)
+        VALUES (?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(transaction_id)
+    .bind(product_code)
+    .bind(amount)
+    .bind(description)
+    .bind(note)
+    .execute(&mut *tx)
+    .await?;
+
+    let sub_transaction_id = result.last_insert_id() as i64;
+
+    tx.commit().await?;
+
+    let row = sqlx::query_as::<_, SubTransaction>(
+        r#"SELECT id, transaction_id, product_code, amount, description, note FROM sub_transactions WHERE id = ?"#,
+    )
+    .bind(sub_transaction_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row)
+}
+
+#[allow(dead_code)]
+pub async fn update_sub_transaction(
+    pool: &MySqlPool,
+    sub_transaction_id: i64,
+    product_code: Option<String>,
+    amount: f64,
+    description: String,
+    note: Option<String>,
+) -> Result<SubTransaction, anyhow::Error> {
+    let mut tx = pool.begin().await?;
+
+    let result = sqlx::query(
+        r#"
+        UPDATE sub_transactions
+        SET product_code = ?, amount = ?, description = ?, note = ?
+        WHERE id = ?
+        "#,
+    )
+    .bind(product_code)
+    .bind(amount)
+    .bind(description)
+    .bind(note)
+    .bind(sub_transaction_id)
+    .execute(&mut *tx)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        tx.rollback().await?;
+        return Err(anyhow::anyhow!("Sub-transaction not found"));
+    }
+
+    tx.commit().await?;
+
+    // reload updated record
+    let row = sqlx::query_as::<_, SubTransaction>(
+        r#"SELECT id, transaction_id, product_code, amount, description, note FROM sub_transactions WHERE id = ?"#,
+    )
+    .bind(sub_transaction_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row)
+}
+
+#[allow(dead_code)]
+pub async fn delete_sub_transaction(
+    pool: &MySqlPool,
+    sub_transaction_id: i64,
+) -> Result<(), anyhow::Error> {
+    let mut tx = pool.begin().await?;
+
+    // delete associations first
+    sqlx::query("DELETE FROM sub_transactions_categories WHERE sub_transaction_id = ?")
+        .bind(sub_transaction_id)
+        .execute(&mut *tx)
+        .await?;
+
+    let result = sqlx::query("DELETE FROM sub_transactions WHERE id = ?")
+        .bind(sub_transaction_id)
+        .execute(&mut *tx)
+        .await?;
+
+    if result.rows_affected() == 0 {
+        tx.rollback().await?;
+        return Err(anyhow::anyhow!("Sub-transaction not found"));
     }
 
     tx.commit().await?;

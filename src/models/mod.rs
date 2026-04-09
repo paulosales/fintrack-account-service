@@ -3,6 +3,7 @@ pub mod budget_setups;
 pub mod budgets;
 pub mod categories;
 pub mod pagination;
+pub mod sub_transactions;
 pub mod transaction_category_totals;
 pub mod transaction_types;
 pub mod transactions;

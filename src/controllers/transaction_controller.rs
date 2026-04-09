@@ -220,6 +220,122 @@ pub async fn delete_transaction(
     }
 }
 
+pub async fn get_sub_transactions(
+    State(pool): State<MySqlPool>,
+    Path(transaction_id): Path<i64>,
+) -> impl IntoResponse {
+    match crate::services::transaction_service::list_sub_transactions(&pool, transaction_id).await {
+        Ok(subs) => (
+            StatusCode::OK,
+            axum::Json(serde_json::json!({
+                "success": true,
+                "data": subs,
+            })),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({
+                "success": false,
+                "error": format!("Failed to fetch sub transactions: {}", error),
+            })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn create_sub_transaction(
+    State(pool): State<MySqlPool>,
+    Path(transaction_id): Path<i64>,
+    Json(payload): Json<SubTransactionPayload>,
+) -> impl IntoResponse {
+    match crate::services::transaction_service::create_sub_transaction(
+        &pool,
+        transaction_id,
+        payload.product_code,
+        payload.amount,
+        payload.description,
+        payload.note,
+    )
+    .await
+    {
+        Ok(st) => (
+            StatusCode::CREATED,
+            axum::Json(serde_json::json!({ "success": true, "data": st })),
+        )
+                .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({ "success": false, "error": format!("Failed to create sub transaction: {}", error) })),
+        )
+                .into_response(),
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct SubTransactionPayload {
+    product_code: Option<String>,
+    amount: f64,
+    description: String,
+    note: Option<String>,
+}
+
+pub async fn update_sub_transaction(
+    State(pool): State<MySqlPool>,
+    Path((_, sub_transaction_id)): Path<(i64, i64)>,
+    Json(payload): Json<SubTransactionPayload>,
+) -> impl IntoResponse {
+    match crate::services::transaction_service::update_sub_transaction(
+        &pool,
+        sub_transaction_id,
+        payload.product_code,
+        payload.amount,
+        payload.description,
+        payload.note,
+    )
+    .await
+    {
+        Ok(st) => (
+            StatusCode::OK,
+            axum::Json(serde_json::json!({ "success": true, "data": st })),
+        )
+            .into_response(),
+        Err(error) if error.to_string().contains("not found") => (
+            StatusCode::NOT_FOUND,
+            axum::Json(serde_json::json!({ "success": false, "error": error.to_string() })),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({ "success": false, "error": format!("Failed to update sub transaction: {}", error) })),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn delete_sub_transaction(
+    State(pool): State<MySqlPool>,
+    Path((_, sub_transaction_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    match crate::services::transaction_service::delete_sub_transaction(&pool, sub_transaction_id).await {
+        Ok(()) => (
+            StatusCode::OK,
+            axum::Json(serde_json::json!({ "success": true })),
+        )
+            .into_response(),
+        Err(error) if error.to_string().contains("not found") => (
+            StatusCode::NOT_FOUND,
+            axum::Json(serde_json::json!({ "success": false, "error": error.to_string() })),
+        )
+            .into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            axum::Json(serde_json::json!({ "success": false, "error": format!("Failed to delete sub transaction: {}", error) })),
+        )
+            .into_response(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
