@@ -8,6 +8,11 @@ pub struct Category {
     pub name: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct CategoryUpsert {
+    pub name: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -24,5 +29,14 @@ mod tests {
 
         assert_eq!(category.id, deserialized.id);
         assert_eq!(category.name, deserialized.name);
+    }
+
+    #[test]
+    fn test_category_upsert() {
+        let payload = CategoryUpsert {
+            name: "Bills".to_string(),
+        };
+
+        assert_eq!(payload.name, "Bills");
     }
 }
