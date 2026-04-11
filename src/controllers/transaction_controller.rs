@@ -256,6 +256,7 @@ pub async fn create_sub_transaction(
         payload.amount,
         payload.description,
         payload.note,
+        payload.category_ids.unwrap_or_default(),
     )
     .await
     {
@@ -273,11 +274,13 @@ pub async fn create_sub_transaction(
 }
 
 #[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SubTransactionPayload {
     product_code: Option<String>,
     amount: f64,
     description: String,
     note: Option<String>,
+    category_ids: Option<Vec<i64>>,
 }
 
 pub async fn update_sub_transaction(
@@ -292,6 +295,7 @@ pub async fn update_sub_transaction(
         payload.amount,
         payload.description,
         payload.note,
+        payload.category_ids.unwrap_or_default(),
     )
     .await
     {

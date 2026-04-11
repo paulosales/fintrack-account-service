@@ -39,6 +39,29 @@ async fn sync_transaction_categories(
     Ok(())
 }
 
+async fn sync_sub_transaction_categories(
+    tx: &mut sqlx::Transaction<'_, sqlx::MySql>,
+    sub_transaction_id: i64,
+    category_ids: &[i64],
+) -> Result<(), anyhow::Error> {
+    sqlx::query("DELETE FROM sub_transactions_categories WHERE sub_transaction_id = ?")
+        .bind(sub_transaction_id)
+        .execute(&mut **tx)
+        .await?;
+
+    for category_id in category_ids {
+        sqlx::query(
+            "INSERT INTO sub_transactions_categories (sub_transaction_id, category_id) VALUES (?, ?)",
+        )
+        .bind(sub_transaction_id)
+        .bind(category_id)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    Ok(())
+}
+
 pub async fn list_transactions(
     pool: &MySqlPool,
     account_id: Option<i64>,
@@ -317,10 +340,21 @@ pub async fn list_sub_transactions(
 ) -> Result<Vec<SubTransaction>, anyhow::Error> {
     let rows = sqlx::query_as::<_, SubTransaction>(
         r#"
-        SELECT id, transaction_id, product_code, amount, description, note
-        FROM sub_transactions
-        WHERE transaction_id = ?
-        ORDER BY id ASC
+        SELECT
+            st.id,
+            st.transaction_id,
+            st.product_code,
+            st.amount,
+            st.description,
+            st.note,
+            GROUP_CONCAT(DISTINCT c.id ORDER BY c.name SEPARATOR ',') AS category_ids,
+            GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS categories
+        FROM sub_transactions st
+        LEFT JOIN sub_transactions_categories stc ON st.id = stc.sub_transaction_id
+        LEFT JOIN categories c ON stc.category_id = c.id
+        WHERE st.transaction_id = ?
+        GROUP BY st.id, st.transaction_id, st.product_code, st.amount, st.description, st.note
+        ORDER BY st.id ASC
         "#,
     )
     .bind(transaction_id)
@@ -330,6 +364,35 @@ pub async fn list_sub_transactions(
     Ok(rows)
 }
 
+async fn get_sub_transaction_by_id(
+    pool: &MySqlPool,
+    sub_transaction_id: i64,
+) -> Result<SubTransaction, anyhow::Error> {
+    let row = sqlx::query_as::<_, SubTransaction>(
+        r#"
+        SELECT
+            st.id,
+            st.transaction_id,
+            st.product_code,
+            st.amount,
+            st.description,
+            st.note,
+            GROUP_CONCAT(DISTINCT c.id ORDER BY c.name SEPARATOR ',') AS category_ids,
+            GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS categories
+        FROM sub_transactions st
+        LEFT JOIN sub_transactions_categories stc ON st.id = stc.sub_transaction_id
+        LEFT JOIN categories c ON stc.category_id = c.id
+        WHERE st.id = ?
+        GROUP BY st.id, st.transaction_id, st.product_code, st.amount, st.description, st.note
+        "#,
+    )
+    .bind(sub_transaction_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row)
+}
+
 pub async fn create_sub_transaction(
     pool: &MySqlPool,
     transaction_id: i64,
@@ -337,8 +400,12 @@ pub async fn create_sub_transaction(
     amount: f64,
     description: String,
     note: Option<String>,
+    category_ids: Vec<i64>,
 ) -> Result<SubTransaction, anyhow::Error> {
     let mut tx = pool.begin().await?;
+    let mut category_ids = category_ids;
+    category_ids.sort_unstable();
+    category_ids.dedup();
 
     let result = sqlx::query(
         r#"
@@ -356,16 +423,10 @@ pub async fn create_sub_transaction(
 
     let sub_transaction_id = result.last_insert_id() as i64;
 
+    sync_sub_transaction_categories(&mut tx, sub_transaction_id, &category_ids).await?;
     tx.commit().await?;
 
-    let row = sqlx::query_as::<_, SubTransaction>(
-        r#"SELECT id, transaction_id, product_code, amount, description, note FROM sub_transactions WHERE id = ?"#,
-    )
-    .bind(sub_transaction_id)
-    .fetch_one(pool)
-    .await?;
-
-    Ok(row)
+    get_sub_transaction_by_id(pool, sub_transaction_id).await
 }
 
 #[allow(dead_code)]
@@ -376,8 +437,12 @@ pub async fn update_sub_transaction(
     amount: f64,
     description: String,
     note: Option<String>,
+    category_ids: Vec<i64>,
 ) -> Result<SubTransaction, anyhow::Error> {
     let mut tx = pool.begin().await?;
+    let mut category_ids = category_ids;
+    category_ids.sort_unstable();
+    category_ids.dedup();
 
     let result = sqlx::query(
         r#"
@@ -399,17 +464,10 @@ pub async fn update_sub_transaction(
         return Err(anyhow::anyhow!("Sub-transaction not found"));
     }
 
+    sync_sub_transaction_categories(&mut tx, sub_transaction_id, &category_ids).await?;
     tx.commit().await?;
 
-    // reload updated record
-    let row = sqlx::query_as::<_, SubTransaction>(
-        r#"SELECT id, transaction_id, product_code, amount, description, note FROM sub_transactions WHERE id = ?"#,
-    )
-    .bind(sub_transaction_id)
-    .fetch_one(pool)
-    .await?;
-
-    Ok(row)
+    get_sub_transaction_by_id(pool, sub_transaction_id).await
 }
 
 #[allow(dead_code)]
