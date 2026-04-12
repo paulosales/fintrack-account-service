@@ -1,3 +1,4 @@
+use axum::middleware as mw;
 use axum::Router;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
@@ -5,6 +6,7 @@ mod app_state;
 mod cache;
 mod controllers;
 mod db;
+mod middleware;
 mod models;
 mod routes;
 mod services;
@@ -22,7 +24,16 @@ async fn main() {
     println!("Database migrations applied successfully");
     println!("Redis cache connected");
 
-    let state = AppState { pool, cache };
+    let keycloak_realm_url = std::env::var("KEYCLOAK_REALM_URL")
+        .unwrap_or_else(|_| "http://keycloak:8080/realms/fintrack".to_string());
+
+    let state = AppState {
+        pool,
+        cache,
+        keycloak_realm_url,
+        http_client: reqwest::Client::new(),
+        jwks_cache: app_state::new_jwks_cache(),
+    };
 
     let app = Router::new()
         .merge(routes::transaction_routes::routes())
@@ -32,6 +43,10 @@ async fn main() {
         .merge(routes::account_routes::routes())
         .merge(routes::transaction_type_routes::routes())
         .merge(routes::category_routes::routes())
+        .route_layer(mw::from_fn_with_state(
+            state.clone(),
+            middleware::auth_middleware::validate_bearer_token,
+        ))
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)

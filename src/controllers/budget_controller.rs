@@ -307,7 +307,13 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(payload.start_date, NaiveDate::from_ymd_opt(2026, 1, 1).unwrap());
-        assert_eq!(payload.end_date, NaiveDate::from_ymd_opt(2026, 12, 31).unwrap());
+        assert_eq!(
+            payload.start_date,
+            NaiveDate::from_ymd_opt(2026, 1, 1).unwrap()
+        );
+        assert_eq!(
+            payload.end_date,
+            NaiveDate::from_ymd_opt(2026, 12, 31).unwrap()
+        );
     }
 }
