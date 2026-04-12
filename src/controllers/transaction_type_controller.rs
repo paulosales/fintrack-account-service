@@ -1,10 +1,14 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse};
+use redis::aio::ConnectionManager;
 use sqlx::MySqlPool;
 
 use crate::services::transaction_type_service;
 
-pub async fn list_transaction_types(State(pool): State<MySqlPool>) -> impl IntoResponse {
-    match transaction_type_service::list_transaction_types(&pool).await {
+pub async fn list_transaction_types(
+    State(pool): State<MySqlPool>,
+    State(mut cache): State<ConnectionManager>,
+) -> impl IntoResponse {
+    match transaction_type_service::list_transaction_types(&pool, &mut cache).await {
         Ok(transaction_types) => (
             StatusCode::OK,
             axum::Json(serde_json::json!({

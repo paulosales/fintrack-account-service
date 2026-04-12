@@ -529,7 +529,7 @@ mod tests {
     async fn test_list_transactions_without_account_filter() {
         // This test would require a test database setup
         // For now, we'll create a mock test that validates the logic structure
-        let transactions = vec![
+        let transactions = [
             create_test_transaction(1, 123, 100.50, "Deposit"),
             create_test_transaction(2, 456, -25.00, "Withdrawal"),
         ];

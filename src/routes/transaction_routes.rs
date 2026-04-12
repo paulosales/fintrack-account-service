@@ -1,10 +1,11 @@
+use crate::app_state::AppState;
 use crate::controllers::transaction_controller;
 use axum::{
     routing::{get, put},
     Router,
 };
 
-pub fn routes() -> Router<sqlx::MySqlPool> {
+pub fn routes() -> Router<AppState> {
     Router::new()
         .route(
             "/transactions",

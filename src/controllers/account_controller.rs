@@ -1,9 +1,13 @@
 use crate::services::account_service;
 use axum::{extract::State, http::StatusCode, response::IntoResponse};
+use redis::aio::ConnectionManager;
 use sqlx::MySqlPool;
 
-pub async fn list_accounts(State(pool): State<MySqlPool>) -> impl IntoResponse {
-    match account_service::list_accounts(&pool).await {
+pub async fn list_accounts(
+    State(pool): State<MySqlPool>,
+    State(mut cache): State<ConnectionManager>,
+) -> impl IntoResponse {
+    match account_service::list_accounts(&pool, &mut cache).await {
         Ok(accounts) => (
             StatusCode::OK,
             axum::Json(serde_json::json!({

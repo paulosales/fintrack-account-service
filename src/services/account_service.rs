@@ -1,7 +1,19 @@
 use crate::models::accounts::Account;
+use redis::aio::ConnectionManager;
 use sqlx::MySqlPool;
 
-pub async fn list_accounts(pool: &MySqlPool) -> Result<Vec<Account>, anyhow::Error> {
+const CACHE_KEY: &str = "accounts:all";
+
+pub async fn list_accounts(
+    pool: &MySqlPool,
+    cache: &mut ConnectionManager,
+) -> Result<Vec<Account>, anyhow::Error> {
+    if let Some(cached) = crate::cache::get(cache, CACHE_KEY).await {
+        if let Ok(accounts) = serde_json::from_str::<Vec<Account>>(&cached) {
+            return Ok(accounts);
+        }
+    }
+
     let accounts = sqlx::query_as::<_, Account>(
         r#"
         SELECT
@@ -12,6 +24,10 @@ pub async fn list_accounts(pool: &MySqlPool) -> Result<Vec<Account>, anyhow::Err
     )
     .fetch_all(pool)
     .await?;
+
+    if let Ok(json) = serde_json::to_string(&accounts) {
+        crate::cache::set(cache, CACHE_KEY, &json).await;
+    }
 
     Ok(accounts)
 }

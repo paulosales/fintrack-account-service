@@ -1,8 +1,9 @@
+use crate::app_state::AppState;
 use axum::{routing::get, Router};
 
 use crate::controllers::transaction_category_total_controller;
 
-pub fn routes() -> Router<sqlx::MySqlPool> {
+pub fn routes() -> Router<AppState> {
     Router::new()
         .route(
             "/transaction-category-totals",

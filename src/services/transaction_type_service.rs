@@ -1,9 +1,19 @@
 use crate::models::transaction_types::TransactionType;
+use redis::aio::ConnectionManager;
 use sqlx::MySqlPool;
+
+const CACHE_KEY: &str = "transaction_types:all";
 
 pub async fn list_transaction_types(
     pool: &MySqlPool,
+    cache: &mut ConnectionManager,
 ) -> Result<Vec<TransactionType>, anyhow::Error> {
+    if let Some(cached) = crate::cache::get(cache, CACHE_KEY).await {
+        if let Ok(types) = serde_json::from_str::<Vec<TransactionType>>(&cached) {
+            return Ok(types);
+        }
+    }
+
     let transaction_types = sqlx::query_as::<_, TransactionType>(
         r#"
         SELECT id, code, name
@@ -13,6 +23,10 @@ pub async fn list_transaction_types(
     )
     .fetch_all(pool)
     .await?;
+
+    if let Ok(json) = serde_json::to_string(&transaction_types) {
+        crate::cache::set(cache, CACHE_KEY, &json).await;
+    }
 
     Ok(transaction_types)
 }

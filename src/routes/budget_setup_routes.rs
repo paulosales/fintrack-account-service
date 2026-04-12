@@ -1,8 +1,9 @@
+use crate::app_state::AppState;
 use axum::{routing::get, Router};
 
 use crate::controllers::budget_setup_controller;
 
-pub fn routes() -> Router<sqlx::MySqlPool> {
+pub fn routes() -> Router<AppState> {
     Router::new()
         .route(
             "/budget-setups",

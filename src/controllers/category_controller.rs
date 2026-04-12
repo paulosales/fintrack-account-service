@@ -3,6 +3,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use redis::aio::ConnectionManager;
 use serde::Deserialize;
 use sqlx::MySqlPool;
 
@@ -26,8 +27,11 @@ fn map_payload(
     Ok(crate::models::categories::CategoryUpsert { name })
 }
 
-pub async fn list_categories(State(pool): State<MySqlPool>) -> impl IntoResponse {
-    match category_service::list_categories(&pool).await {
+pub async fn list_categories(
+    State(pool): State<MySqlPool>,
+    State(mut cache): State<ConnectionManager>,
+) -> impl IntoResponse {
+    match category_service::list_categories(&pool, &mut cache).await {
         Ok(categories) => (
             StatusCode::OK,
             axum::Json(serde_json::json!({
@@ -50,6 +54,7 @@ pub async fn list_categories(State(pool): State<MySqlPool>) -> impl IntoResponse
 
 pub async fn create_category(
     State(pool): State<MySqlPool>,
+    State(mut cache): State<ConnectionManager>,
     Json(payload): Json<CategoryPayload>,
 ) -> impl IntoResponse {
     let payload = match map_payload(payload) {
@@ -66,7 +71,7 @@ pub async fn create_category(
         }
     };
 
-    match category_service::create_category(&pool, payload).await {
+    match category_service::create_category(&pool, &mut cache, payload).await {
         Ok(category) => (
             StatusCode::CREATED,
             axum::Json(serde_json::json!({
@@ -88,6 +93,7 @@ pub async fn create_category(
 
 pub async fn update_category(
     State(pool): State<MySqlPool>,
+    State(mut cache): State<ConnectionManager>,
     Path(category_id): Path<i64>,
     Json(payload): Json<CategoryPayload>,
 ) -> impl IntoResponse {
@@ -105,7 +111,7 @@ pub async fn update_category(
         }
     };
 
-    match category_service::update_category(&pool, category_id, payload).await {
+    match category_service::update_category(&pool, &mut cache, category_id, payload).await {
         Ok(category) => (
             StatusCode::OK,
             axum::Json(serde_json::json!({
@@ -127,9 +133,10 @@ pub async fn update_category(
 
 pub async fn delete_category(
     State(pool): State<MySqlPool>,
+    State(mut cache): State<ConnectionManager>,
     Path(category_id): Path<i64>,
 ) -> impl IntoResponse {
-    match category_service::delete_category(&pool, category_id).await {
+    match category_service::delete_category(&pool, &mut cache, category_id).await {
         Ok(()) => (
             StatusCode::OK,
             axum::Json(serde_json::json!({

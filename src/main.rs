@@ -1,17 +1,28 @@
 use axum::Router;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
+mod app_state;
+mod cache;
 mod controllers;
 mod db;
 mod models;
 mod routes;
 mod services;
 
+use app_state::AppState;
+
 #[tokio::main]
 async fn main() {
     let pool = db::get_pool().await;
 
     db::run_migrations(&pool).await;
+
+    let cache = cache::create_connection_manager().await;
+
+    println!("Database migrations applied successfully");
+    println!("Redis cache connected");
+
+    let state = AppState { pool, cache };
 
     let app = Router::new()
         .merge(routes::transaction_routes::routes())
@@ -27,7 +38,7 @@ async fn main() {
                 .allow_methods(Any)
                 .allow_headers(Any),
         )
-        .with_state(pool);
+        .with_state(state);
 
     let listener = TcpListener::bind("0.0.0.0:3001")
         .await

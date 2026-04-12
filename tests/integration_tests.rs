@@ -6,7 +6,6 @@ mod integration_tests {
         // This is more of a compilation test, but it's useful for integration
 
         // If the code compiles and this test runs, all imports are working
-        assert!(true);
     }
 
     #[test]

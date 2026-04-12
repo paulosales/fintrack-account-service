@@ -27,7 +27,7 @@ pub fn build_pagination_meta(page: u32, page_size: u32, total_count: u64) -> Pag
     let total_pages = if total_count == 0 {
         0
     } else {
-        ((total_count + page_size as u64 - 1) / page_size as u64) as u32
+        total_count.div_ceil(page_size as u64) as u32
     };
 
     PaginationMeta {

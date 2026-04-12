@@ -1,3 +1,4 @@
+use crate::app_state::AppState;
 use axum::{
     routing::{get, put},
     Router,
@@ -5,7 +6,7 @@ use axum::{
 
 use crate::controllers::category_controller;
 
-pub fn routes() -> Router<sqlx::MySqlPool> {
+pub fn routes() -> Router<AppState> {
     Router::new()
         .route(
             "/categories",
