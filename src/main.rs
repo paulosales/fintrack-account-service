@@ -11,6 +11,8 @@ mod services;
 async fn main() {
     let pool = db::get_pool().await;
 
+    db::run_migrations(&pool).await;
+
     let app = Router::new()
         .merge(routes::transaction_routes::routes())
         .merge(routes::budget_setup_routes::routes())

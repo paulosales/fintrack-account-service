@@ -12,6 +12,13 @@ pub async fn get_pool() -> MySqlPool {
         .expect("Failed to create pool")
 }
 
+pub async fn run_migrations(pool: &MySqlPool) {
+    sqlx::migrate!("./migrations")
+        .run(pool)
+        .await
+        .expect("Failed to run database migrations");
+}
+
 #[cfg(test)]
 mod tests {
     use std::env;
