@@ -89,7 +89,8 @@ fn try_validate(
     // Validate RS256 signature and token expiry.
     // Issuer / audience validation is intentionally skipped here; configure it
     // via environment-specific settings in production.
-    let validation = Validation::new(Algorithm::RS256);
+    let mut validation = Validation::new(Algorithm::RS256);
+    validation.validate_aud = false;
     Some(decode::<JwtClaims>(token, key, &validation).map(|d| d.claims))
 }
 
