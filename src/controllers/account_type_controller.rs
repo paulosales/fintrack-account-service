@@ -1,4 +1,4 @@
-use crate::services::account_service;
+use crate::services::account_type_service;
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -10,44 +10,35 @@ use sqlx::MySqlPool;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AccountPayload {
+pub struct AccountTypePayload {
     code: String,
     name: String,
-    account_type_id: i64,
 }
 
 fn map_payload(
-    payload: AccountPayload,
-) -> Result<crate::models::accounts::AccountUpsert, &'static str> {
+    payload: AccountTypePayload,
+) -> Result<crate::models::account_types::AccountTypeUpsert, &'static str> {
     let code = payload.code.trim().to_string();
     let name = payload.name.trim().to_string();
 
     if code.is_empty() || name.is_empty() {
-        return Err("Account code and name are required");
+        return Err("Account type code and name are required");
     }
 
-    if payload.account_type_id <= 0 {
-        return Err("A valid account type is required");
-    }
-
-    Ok(crate::models::accounts::AccountUpsert {
-        code,
-        name,
-        account_type_id: payload.account_type_id,
-    })
+    Ok(crate::models::account_types::AccountTypeUpsert { code, name })
 }
 
-pub async fn list_accounts(
+pub async fn list_account_types(
     State(pool): State<MySqlPool>,
     State(mut cache): State<ConnectionManager>,
 ) -> impl IntoResponse {
-    match account_service::list_accounts(&pool, &mut cache).await {
-        Ok(accounts) => (
+    match account_type_service::list_account_types(&pool, &mut cache).await {
+        Ok(account_types) => (
             StatusCode::OK,
             axum::Json(serde_json::json!({
                 "success": true,
-                "data": accounts,
-                "count": accounts.len()
+                "data": account_types,
+                "count": account_types.len()
             })),
         )
             .into_response(),
@@ -55,17 +46,17 @@ pub async fn list_accounts(
             StatusCode::INTERNAL_SERVER_ERROR,
             axum::Json(serde_json::json!({
                 "success": false,
-                "error": format!("Failed to fetch accounts: {}", e)
+                "error": format!("Failed to fetch account types: {}", e)
             })),
         )
             .into_response(),
     }
 }
 
-pub async fn create_account(
+pub async fn create_account_type(
     State(pool): State<MySqlPool>,
     State(mut cache): State<ConnectionManager>,
-    Json(payload): Json<AccountPayload>,
+    Json(payload): Json<AccountTypePayload>,
 ) -> impl IntoResponse {
     let payload = match map_payload(payload) {
         Ok(p) => p,
@@ -78,28 +69,28 @@ pub async fn create_account(
         }
     };
 
-    match account_service::create_account(&pool, &mut cache, payload).await {
-        Ok(account) => (
+    match account_type_service::create_account_type(&pool, &mut cache, payload).await {
+        Ok(account_type) => (
             StatusCode::CREATED,
-            axum::Json(serde_json::json!({ "success": true, "data": account })),
+            axum::Json(serde_json::json!({ "success": true, "data": account_type })),
         )
             .into_response(),
         Err(error) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             axum::Json(serde_json::json!({
                 "success": false,
-                "error": format!("Failed to create account: {}", error)
+                "error": format!("Failed to create account type: {}", error)
             })),
         )
             .into_response(),
     }
 }
 
-pub async fn update_account(
+pub async fn update_account_type(
     State(pool): State<MySqlPool>,
     State(mut cache): State<ConnectionManager>,
-    Path(account_id): Path<i64>,
-    Json(payload): Json<AccountPayload>,
+    Path(account_type_id): Path<i64>,
+    Json(payload): Json<AccountTypePayload>,
 ) -> impl IntoResponse {
     let payload = match map_payload(payload) {
         Ok(p) => p,
@@ -112,29 +103,31 @@ pub async fn update_account(
         }
     };
 
-    match account_service::update_account(&pool, &mut cache, account_id, payload).await {
-        Ok(account) => (
+    match account_type_service::update_account_type(&pool, &mut cache, account_type_id, payload)
+        .await
+    {
+        Ok(account_type) => (
             StatusCode::OK,
-            axum::Json(serde_json::json!({ "success": true, "data": account })),
+            axum::Json(serde_json::json!({ "success": true, "data": account_type })),
         )
             .into_response(),
         Err(error) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             axum::Json(serde_json::json!({
                 "success": false,
-                "error": format!("Failed to update account: {}", error)
+                "error": format!("Failed to update account type: {}", error)
             })),
         )
             .into_response(),
     }
 }
 
-pub async fn delete_account(
+pub async fn delete_account_type(
     State(pool): State<MySqlPool>,
     State(mut cache): State<ConnectionManager>,
-    Path(account_id): Path<i64>,
+    Path(account_type_id): Path<i64>,
 ) -> impl IntoResponse {
-    match account_service::delete_account(&pool, &mut cache, account_id).await {
+    match account_type_service::delete_account_type(&pool, &mut cache, account_type_id).await {
         Ok(()) => (
             StatusCode::OK,
             axum::Json(serde_json::json!({ "success": true })),
@@ -144,7 +137,7 @@ pub async fn delete_account(
             StatusCode::INTERNAL_SERVER_ERROR,
             axum::Json(serde_json::json!({
                 "success": false,
-                "error": format!("Failed to delete account: {}", error)
+                "error": format!("Failed to delete account type: {}", error)
             })),
         )
             .into_response(),
@@ -154,39 +147,36 @@ pub async fn delete_account(
 #[cfg(test)]
 mod tests {
     use super::map_payload;
-    use crate::models::accounts::Account;
+    use crate::models::account_types::AccountType;
 
     #[test]
-    fn test_create_mock_account() {
-        let account = Account {
+    fn test_create_mock_account_type() {
+        let account_type = AccountType {
             id: 1,
-            code: "CHK-001".to_string(),
-            name: "Checking Account".to_string(),
-            account_type_id: 1,
+            code: "CHECKING".to_string(),
+            name: "Checking".to_string(),
         };
-        assert_eq!(account.id, 1);
-        assert_eq!(account.code, "CHK-001");
-        assert_eq!(account.name, "Checking Account");
+        assert_eq!(account_type.id, 1);
+        assert_eq!(account_type.code, "CHECKING");
+        assert_eq!(account_type.name, "Checking");
     }
 
     #[test]
     fn test_map_payload_trims_fields() {
-        let payload = super::AccountPayload {
-            code: "  CHK-001  ".to_string(),
+        let payload = super::AccountTypePayload {
+            code: "  CHECKING  ".to_string(),
             name: "  Checking  ".to_string(),
-            account_type_id: 1,
         };
         let mapped = map_payload(payload).unwrap();
-        assert_eq!(mapped.code, "CHK-001");
+        assert_eq!(mapped.code, "CHECKING");
         assert_eq!(mapped.name, "Checking");
     }
 
     #[test]
     fn test_map_payload_requires_code_and_name() {
-        let payload = super::AccountPayload {
+        let payload = super::AccountTypePayload {
             code: "  ".to_string(),
             name: "Checking".to_string(),
-            account_type_id: 1,
         };
         assert!(map_payload(payload).is_err());
     }

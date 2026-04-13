@@ -10,6 +10,13 @@ pub struct Account {
     pub account_type_id: i64,
 }
 
+#[derive(Debug, Clone)]
+pub struct AccountUpsert {
+    pub code: String,
+    pub name: String,
+    pub account_type_id: i64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

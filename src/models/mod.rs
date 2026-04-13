@@ -1,3 +1,4 @@
+pub mod account_types;
 pub mod accounts;
 pub mod budget_setups;
 pub mod budgets;

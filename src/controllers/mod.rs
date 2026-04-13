@@ -1,4 +1,5 @@
 pub mod account_controller;
+pub mod account_type_controller;
 pub mod budget_controller;
 pub mod budget_setup_controller;
 pub mod category_controller;

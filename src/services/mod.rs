@@ -1,4 +1,5 @@
 pub mod account_service;
+pub mod account_type_service;
 pub mod budget_service;
 pub mod budget_setup_service;
 pub mod category_service;

@@ -41,6 +41,7 @@ async fn main() {
         .merge(routes::budget_routes::routes())
         .merge(routes::transaction_category_total_routes::routes())
         .merge(routes::account_routes::routes())
+        .merge(routes::account_type_routes::routes())
         .merge(routes::transaction_type_routes::routes())
         .merge(routes::category_routes::routes())
         .route_layer(mw::from_fn_with_state(

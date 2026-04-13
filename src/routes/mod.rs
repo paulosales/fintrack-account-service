@@ -1,4 +1,5 @@
 pub mod account_routes;
+pub mod account_type_routes;
 pub mod budget_routes;
 pub mod budget_setup_routes;
 pub mod category_routes;
