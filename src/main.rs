@@ -8,6 +8,7 @@ mod controllers;
 mod db;
 mod middleware;
 mod models;
+mod rabbitmq;
 mod routes;
 mod services;
 
@@ -15,6 +16,13 @@ use app_state::AppState;
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive("account_service=info".parse().unwrap()),
+        )
+        .init();
+
     let pool = db::get_pool().await;
 
     db::run_migrations(&pool).await;
@@ -26,6 +34,9 @@ async fn main() {
 
     let keycloak_realm_url = std::env::var("KEYCLOAK_REALM_URL")
         .unwrap_or_else(|_| "http://keycloak:8080/realms/fintrack".to_string());
+
+    // Clone pool for the RabbitMQ consumer before it is moved into AppState
+    let rabbitmq_pool = pool.clone();
 
     let state = AppState {
         pool,
@@ -61,6 +72,11 @@ async fn main() {
         .expect("Failed to bind");
 
     println!("Server running on http://0.0.0.0:3001");
+
+    // Spawn the RabbitMQ consumer as a background task
+    tokio::spawn(async move {
+        rabbitmq::consumer::start_consumer(rabbitmq_pool).await;
+    });
 
     axum::serve(listener, app).await.expect("Server error");
 }
