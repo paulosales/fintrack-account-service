@@ -1,8 +1,9 @@
 use crate::models::sub_transactions::SubTransaction;
 use crate::models::transactions::Transaction;
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime};
 use sqlx::MySqlPool;
 use sqlx::Row;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -62,8 +63,119 @@ async fn sync_sub_transaction_categories(
     Ok(())
 }
 
+/// Fetches the display currency code from the settings service.
+/// Returns `None` if the setting has no value, is not found, or the call fails.
+async fn fetch_target_currency(
+    http_client: &reqwest::Client,
+    settings_service_url: &str,
+) -> Option<String> {
+    let url = format!("{}/settings/current_currency", settings_service_url);
+    let resp = match http_client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(
+                url = %url,
+                error = %e,
+                "Failed to reach settings service while fetching current_currency"
+            );
+            return None;
+        }
+    };
+    if resp.status().as_u16() == 404 {
+        return None;
+    }
+    if !resp.status().is_success() {
+        tracing::error!(
+            url = %url,
+            status = %resp.status(),
+            "Settings service returned an error while fetching current_currency"
+        );
+        return None;
+    }
+    let body: serde_json::Value = match resp.json().await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to parse settings service response");
+            return None;
+        }
+    };
+    body["data"]["value"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+}
+
+/// Fetches the exchange rate from `from` to `to` on `date` via the currency service.
+/// Returns `None` and logs an error if the call fails.
+/// Returns `Some(1.0)` immediately when both currencies are the same.
+async fn fetch_exchange_rate(
+    http_client: &reqwest::Client,
+    currency_service_url: &str,
+    from: &str,
+    to: &str,
+    date: NaiveDate,
+) -> Option<f64> {
+    if from == to {
+        return Some(1.0);
+    }
+    let url = format!(
+        "{}/rates?date={}&from={}&to={}",
+        currency_service_url,
+        date.format("%Y-%m-%d"),
+        from,
+        to
+    );
+    let resp = match http_client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(
+                url = %url,
+                from = %from,
+                to = %to,
+                date = %date,
+                error = %e,
+                "Failed to reach currency service while fetching exchange rate"
+            );
+            return None;
+        }
+    };
+    if !resp.status().is_success() {
+        tracing::error!(
+            url = %url,
+            from = %from,
+            to = %to,
+            date = %date,
+            status = %resp.status(),
+            "Currency service returned an error while fetching exchange rate"
+        );
+        return None;
+    }
+    let body: serde_json::Value = match resp.json().await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to parse currency service response");
+            return None;
+        }
+    };
+    match body["data"]["rate"].as_f64() {
+        Some(rate) => Some(rate),
+        None => {
+            tracing::error!(
+                from = %from,
+                to = %to,
+                date = %date,
+                "Currency service response did not contain a valid rate value"
+            );
+            None
+        }
+    }
+}
+
 pub async fn list_transactions(
     pool: &MySqlPool,
+    http_client: &reqwest::Client,
+    settings_service_url: &str,
+    currency_service_url: &str,
     account_id: Option<i64>,
     transaction_type_id: Option<i64>,
     category_id: Option<i64>,
@@ -101,7 +213,7 @@ pub async fn list_transactions(
     let total_count = total_row.try_get::<i64, _>("total_count")? as u64;
     let offset = ((page - 1) * page_size) as i64;
 
-    let transactions = sqlx::query_as::<_, Transaction>(
+    let mut transactions = sqlx::query_as::<_, Transaction>(
         r#"
         SELECT
             t.id,
@@ -114,11 +226,13 @@ pub async fn list_transactions(
             t.amount,
             t.description,
             t.note,
-            t.fingerprint
+            t.fingerprint,
+            a.currency AS account_currency
         FROM transactions t
         LEFT JOIN transaction_types tt ON t.transaction_type_id = tt.id
         LEFT JOIN transactions_categories tc ON t.id = tc.transaction_id
         LEFT JOIN categories c ON tc.category_id = c.id
+        LEFT JOIN accounts a ON t.account_id = a.id
         WHERE (? IS NULL OR t.account_id = ?)
         AND (? IS NULL OR t.transaction_type_id = ?)
         AND (? IS NULL OR EXISTS (
@@ -138,7 +252,8 @@ pub async fn list_transactions(
             t.amount,
             t.description,
             t.note,
-            t.fingerprint
+            t.fingerprint,
+            a.currency
         ORDER BY t.datetime DESC
         LIMIT ? OFFSET ?
         "#,
@@ -156,10 +271,39 @@ pub async fn list_transactions(
     .fetch_all(pool)
     .await?;
 
+    // Convert amounts from each account's currency to the configured display currency.
+    // Rates are fetched once per unique (account_currency, date) pair to avoid redundant calls.
+    // If the settings or currency services are unavailable, amounts are returned unconverted.
+    if let Some(ref to_currency) = fetch_target_currency(http_client, settings_service_url).await {
+        let mut rate_cache: HashMap<(String, NaiveDate), Option<f64>> = HashMap::new();
+        for t in &mut transactions {
+            if let Some(ref from_currency) = t.account_currency.clone() {
+                if from_currency != to_currency {
+                    let date = t.datetime.date();
+                    let key = (from_currency.clone(), date);
+                    if !rate_cache.contains_key(&key) {
+                        let rate = fetch_exchange_rate(
+                            http_client,
+                            currency_service_url,
+                            from_currency,
+                            to_currency,
+                            date,
+                        )
+                        .await;
+                        rate_cache.insert(key.clone(), rate);
+                    }
+                    if let Some(Some(rate)) = rate_cache.get(&key) {
+                        t.amount *= rate;
+                    }
+                }
+            }
+        }
+    }
+
     Ok((transactions, total_count))
 }
 
-pub async fn get_transaction_by_id(
+async fn fetch_transaction_by_id(
     pool: &MySqlPool,
     transaction_id: i64,
 ) -> Result<Option<Transaction>, anyhow::Error> {
@@ -239,7 +383,7 @@ pub async fn create_transaction(
     sync_transaction_categories(&mut tx, transaction_id, &category_ids).await?;
     tx.commit().await?;
 
-    get_transaction_by_id(pool, transaction_id)
+    fetch_transaction_by_id(pool, transaction_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Failed to load created transaction"))
 }
@@ -285,7 +429,7 @@ pub async fn update_transaction(
     sync_transaction_categories(&mut tx, transaction_id, &category_ids).await?;
     tx.commit().await?;
 
-    get_transaction_by_id(pool, transaction_id)
+    fetch_transaction_by_id(pool, transaction_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Transaction not found"))
 }
@@ -336,9 +480,12 @@ pub async fn delete_transaction(
 
 pub async fn list_sub_transactions(
     pool: &MySqlPool,
+    http_client: &reqwest::Client,
+    settings_service_url: &str,
+    currency_service_url: &str,
     transaction_id: i64,
 ) -> Result<Vec<SubTransaction>, anyhow::Error> {
-    let rows = sqlx::query_as::<_, SubTransaction>(
+    let mut rows = sqlx::query_as::<_, SubTransaction>(
         r#"
         SELECT
             st.id,
@@ -348,12 +495,16 @@ pub async fn list_sub_transactions(
             st.description,
             st.note,
             GROUP_CONCAT(DISTINCT c.id ORDER BY c.name SEPARATOR ',') AS category_ids,
-            GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS categories
+            GROUP_CONCAT(DISTINCT c.name ORDER BY c.name SEPARATOR ', ') AS categories,
+            a.currency AS account_currency,
+            t.datetime AS transaction_datetime
         FROM sub_transactions st
+        JOIN transactions t ON st.transaction_id = t.id
+        JOIN accounts a ON t.account_id = a.id
         LEFT JOIN sub_transactions_categories stc ON st.id = stc.sub_transaction_id
         LEFT JOIN categories c ON stc.category_id = c.id
         WHERE st.transaction_id = ?
-        GROUP BY st.id, st.transaction_id, st.product_code, st.amount, st.description, st.note
+        GROUP BY st.id, st.transaction_id, st.product_code, st.amount, st.description, st.note, a.currency, t.datetime
         ORDER BY st.id ASC
         "#,
     )
@@ -361,10 +512,41 @@ pub async fn list_sub_transactions(
     .fetch_all(pool)
     .await?;
 
+    // All sub-transactions share the same parent transaction, so only one rate fetch is needed.
+    // The HashMap keeps things uniform in case future queries mix dates/currencies.
+    // If the settings or currency services are unavailable, amounts are returned unconverted.
+    if let Some(ref to_currency) = fetch_target_currency(http_client, settings_service_url).await {
+        let mut rate_cache: HashMap<(String, NaiveDate), Option<f64>> = HashMap::new();
+        for st in &mut rows {
+            if let (Some(ref from_currency), Some(ref dt)) =
+                (st.account_currency.clone(), st.transaction_datetime)
+            {
+                if from_currency != to_currency {
+                    let date = dt.date();
+                    let key = (from_currency.clone(), date);
+                    if !rate_cache.contains_key(&key) {
+                        let rate = fetch_exchange_rate(
+                            http_client,
+                            currency_service_url,
+                            from_currency,
+                            to_currency,
+                            date,
+                        )
+                        .await;
+                        rate_cache.insert(key.clone(), rate);
+                    }
+                    if let Some(Some(rate)) = rate_cache.get(&key) {
+                        st.amount *= rate;
+                    }
+                }
+            }
+        }
+    }
+
     Ok(rows)
 }
 
-async fn get_sub_transaction_by_id(
+async fn fetch_sub_transaction_by_id(
     pool: &MySqlPool,
     sub_transaction_id: i64,
 ) -> Result<SubTransaction, anyhow::Error> {
@@ -426,7 +608,7 @@ pub async fn create_sub_transaction(
     sync_sub_transaction_categories(&mut tx, sub_transaction_id, &category_ids).await?;
     tx.commit().await?;
 
-    get_sub_transaction_by_id(pool, sub_transaction_id).await
+    fetch_sub_transaction_by_id(pool, sub_transaction_id).await
 }
 
 #[allow(dead_code)]
@@ -467,7 +649,7 @@ pub async fn update_sub_transaction(
     sync_sub_transaction_categories(&mut tx, sub_transaction_id, &category_ids).await?;
     tx.commit().await?;
 
-    get_sub_transaction_by_id(pool, sub_transaction_id).await
+    fetch_sub_transaction_by_id(pool, sub_transaction_id).await
 }
 
 #[allow(dead_code)]
@@ -522,6 +704,7 @@ mod tests {
             description: description.to_string(),
             note: Some("Test note".to_string()),
             fingerprint: format!("fp{}", id),
+            account_currency: None,
         }
     }
 

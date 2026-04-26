@@ -1,3 +1,4 @@
+use crate::app_state::AppState;
 use crate::models::pagination::{build_pagination_meta, normalize_page, normalize_page_size};
 use crate::services::transaction_service;
 use axum::{
@@ -58,7 +59,7 @@ fn map_payload(
 }
 
 pub async fn list_transactions(
-    State(pool): State<MySqlPool>,
+    State(state): State<AppState>,
     Query(params): Query<ListParams>,
 ) -> impl IntoResponse {
     let page = normalize_page(params.page);
@@ -73,7 +74,10 @@ pub async fn list_transactions(
     });
 
     match transaction_service::list_transactions(
-        &pool,
+        &state.pool,
+        &state.http_client,
+        &state.settings_service_url,
+        &state.currency_service_url,
         params.account_id,
         params.transaction_type_id,
         params.category_id,
@@ -221,10 +225,18 @@ pub async fn delete_transaction(
 }
 
 pub async fn get_sub_transactions(
-    State(pool): State<MySqlPool>,
+    State(state): State<AppState>,
     Path(transaction_id): Path<i64>,
 ) -> impl IntoResponse {
-    match crate::services::transaction_service::list_sub_transactions(&pool, transaction_id).await {
+    match crate::services::transaction_service::list_sub_transactions(
+        &state.pool,
+        &state.http_client,
+        &state.settings_service_url,
+        &state.currency_service_url,
+        transaction_id,
+    )
+    .await
+    {
         Ok(subs) => (
             StatusCode::OK,
             axum::Json(serde_json::json!({
@@ -363,6 +375,7 @@ mod tests {
             description: "Test transaction".to_string(),
             note: Some("Test note".to_string()),
             fingerprint: format!("fp{}", id),
+            account_currency: None,
         }
     }
 

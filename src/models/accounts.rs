@@ -8,6 +8,7 @@ pub struct Account {
     pub code: String,
     pub name: String,
     pub account_type_id: i64,
+    pub currency: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -15,6 +16,7 @@ pub struct AccountUpsert {
     pub code: String,
     pub name: String,
     pub account_type_id: i64,
+    pub currency: Option<String>,
 }
 
 #[cfg(test)]
@@ -28,6 +30,7 @@ mod tests {
             id: 1,
             code: "CHK-001".to_string(),
             name: "Checking Account".to_string(),
+            currency: Some("USD".to_string()),
             account_type_id: 1,
         };
 

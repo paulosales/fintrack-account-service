@@ -24,6 +24,8 @@ pub struct AppState {
     pub keycloak_realm_url: String,
     pub http_client: reqwest::Client,
     pub jwks_cache: JwksCache,
+    pub settings_service_url: String,
+    pub currency_service_url: String,
 }
 
 impl FromRef<AppState> for MySqlPool {

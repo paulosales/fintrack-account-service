@@ -16,6 +16,10 @@ pub struct Transaction {
     pub description: String,
     pub note: Option<String>,
     pub fingerprint: String,
+    /// Account currency used for conversion; not included in API responses.
+    #[serde(skip_serializing)]
+    #[sqlx(default)]
+    pub account_currency: Option<String>,
 }
 
 #[cfg(test)]
@@ -40,6 +44,7 @@ mod tests {
             description: "Grocery shopping".to_string(),
             note: Some("Weekly groceries".to_string()),
             fingerprint: "abc123def456".to_string(),
+            account_currency: None,
         };
 
         let json = serde_json::to_string(&transaction).unwrap();
@@ -81,6 +86,7 @@ mod tests {
             description: "ATM withdrawal".to_string(),
             note: None,
             fingerprint: "def789ghi012".to_string(),
+            account_currency: None,
         };
 
         let json = serde_json::to_string(&transaction).unwrap();
@@ -108,6 +114,7 @@ mod tests {
             description: "Test transaction".to_string(),
             note: Some("Test note".to_string()),
             fingerprint: "test123".to_string(),
+            account_currency: None,
         };
 
         let debug_str = format!("{:?}", transaction);

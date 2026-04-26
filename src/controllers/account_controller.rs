@@ -14,6 +14,7 @@ pub struct AccountPayload {
     code: String,
     name: String,
     account_type_id: i64,
+    currency: Option<String>,
 }
 
 fn map_payload(
@@ -21,6 +22,7 @@ fn map_payload(
 ) -> Result<crate::models::accounts::AccountUpsert, &'static str> {
     let code = payload.code.trim().to_string();
     let name = payload.name.trim().to_string();
+    let currency = payload.currency.as_ref().map(|c| c.trim().to_string());
 
     if code.is_empty() || name.is_empty() {
         return Err("Account code and name are required");
@@ -34,6 +36,7 @@ fn map_payload(
         code,
         name,
         account_type_id: payload.account_type_id,
+        currency: currency.filter(|c| !c.is_empty()),
     })
 }
 
@@ -161,6 +164,7 @@ mod tests {
         let account = Account {
             id: 1,
             code: "CHK-001".to_string(),
+            currency: Some("USD".to_string()),
             name: "Checking Account".to_string(),
             account_type_id: 1,
         };
@@ -174,18 +178,21 @@ mod tests {
         let payload = super::AccountPayload {
             code: "  CHK-001  ".to_string(),
             name: "  Checking  ".to_string(),
+            currency: Some("  USD  ".to_string()),
             account_type_id: 1,
         };
         let mapped = map_payload(payload).unwrap();
         assert_eq!(mapped.code, "CHK-001");
         assert_eq!(mapped.name, "Checking");
+        assert_eq!(mapped.currency, Some("USD".to_string()));
     }
 
     #[test]
     fn test_map_payload_requires_code_and_name() {
         let payload = super::AccountPayload {
             code: "  ".to_string(),
-            name: "Checking".to_string(),
+            currency: Some("  USD  ".to_string()),
+            name: "  Checking  ".to_string(),
             account_type_id: 1,
         };
         assert!(map_payload(payload).is_err());

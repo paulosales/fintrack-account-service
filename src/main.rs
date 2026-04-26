@@ -35,6 +35,12 @@ async fn main() {
     let keycloak_realm_url = std::env::var("KEYCLOAK_REALM_URL")
         .unwrap_or_else(|_| "http://keycloak:8080/realms/fintrack".to_string());
 
+    let settings_service_url = std::env::var("SETTINGS_SERVICE_URL")
+        .unwrap_or_else(|_| "http://settings-service:3004".to_string());
+
+    let currency_service_url = std::env::var("CURRENCY_SERVICE_URL")
+        .unwrap_or_else(|_| "http://currency-service:3003".to_string());
+
     // Clone pool for the RabbitMQ consumer before it is moved into AppState
     let rabbitmq_pool = pool.clone();
 
@@ -44,6 +50,8 @@ async fn main() {
         keycloak_realm_url,
         http_client: reqwest::Client::new(),
         jwks_cache: app_state::new_jwks_cache(),
+        settings_service_url,
+        currency_service_url,
     };
 
     let app = Router::new()

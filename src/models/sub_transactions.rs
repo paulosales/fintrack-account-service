@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use serde::Serialize;
 use sqlx::FromRow;
 
@@ -12,6 +13,14 @@ pub struct SubTransaction {
     pub note: Option<String>,
     pub category_ids: Option<String>,
     pub categories: Option<String>,
+    /// Account currency fetched via JOIN; not included in API responses.
+    #[serde(skip_serializing)]
+    #[sqlx(default)]
+    pub account_currency: Option<String>,
+    /// Parent transaction datetime used as the conversion date; not included in API responses.
+    #[serde(skip_serializing)]
+    #[sqlx(default)]
+    pub transaction_datetime: Option<NaiveDateTime>,
 }
 
 #[cfg(test)]
@@ -29,6 +38,8 @@ mod tests {
             note: None,
             category_ids: Some("1,2".to_string()),
             categories: Some("Groceries, Home".to_string()),
+            account_currency: None,
+            transaction_datetime: None,
         };
 
         assert_eq!(st.id, 1);

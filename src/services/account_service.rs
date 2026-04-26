@@ -8,7 +8,7 @@ const CACHE_KEY: &str = "accounts:all";
 async fn get_account_by_id(pool: &MySqlPool, account_id: i64) -> Result<Account, anyhow::Error> {
     let account = sqlx::query_as::<_, Account>(
         r#"
-        SELECT id, code, name, account_type_id
+        SELECT id, code, name, account_type_id, currency
         FROM accounts
         WHERE id = ?
         "#,
@@ -33,7 +33,7 @@ pub async fn list_accounts(
     let accounts = sqlx::query_as::<_, Account>(
         r#"
         SELECT
-            id, code, name, account_type_id
+            id, code, name, account_type_id, currency
         FROM accounts
         ORDER BY code ASC
         "#,
@@ -55,13 +55,14 @@ pub async fn create_account(
 ) -> Result<Account, anyhow::Error> {
     let result = sqlx::query(
         r#"
-        INSERT INTO accounts (code, name, account_type_id)
-        VALUES (?, ?, ?)
+        INSERT INTO accounts (code, name, account_type_id, currency)
+        VALUES (?, ?, ?, ?)
         "#,
     )
     .bind(&payload.code)
     .bind(&payload.name)
     .bind(payload.account_type_id)
+    .bind(&payload.currency)
     .execute(pool)
     .await?;
 
@@ -79,13 +80,14 @@ pub async fn update_account(
     let result = sqlx::query(
         r#"
         UPDATE accounts
-        SET code = ?, name = ?, account_type_id = ?
+        SET code = ?, name = ?, account_type_id = ?, currency = ?
         WHERE id = ?
         "#,
     )
     .bind(&payload.code)
     .bind(&payload.name)
     .bind(payload.account_type_id)
+    .bind(&payload.currency)
     .bind(account_id)
     .execute(pool)
     .await?;
@@ -128,21 +130,29 @@ mod tests {
     use super::*;
 
     // Helper function to create test accounts
-    fn create_test_account(id: i64, code: &str, name: &str, account_type_id: i64) -> Account {
+    fn create_test_account(
+        id: i64,
+        code: &str,
+        name: &str,
+        account_type_id: i64,
+        currency: Option<&str>,
+    ) -> Account {
         Account {
             id,
             code: code.to_string(),
             name: name.to_string(),
+            currency: currency.map(|c| c.to_string()),
             account_type_id,
         }
     }
 
     #[test]
     fn test_create_test_account() {
-        let account = create_test_account(1, "CHK-001", "Checking Account", 1);
+        let account = create_test_account(1, "CHK-001", "Checking Account", 1, Some("USD"));
         assert_eq!(account.id, 1);
         assert_eq!(account.code, "CHK-001");
         assert_eq!(account.name, "Checking Account");
         assert_eq!(account.account_type_id, 1);
+        assert_eq!(account.currency, Some("USD".to_string()));
     }
 }
