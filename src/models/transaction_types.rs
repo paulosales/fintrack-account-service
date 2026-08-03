@@ -9,6 +9,12 @@ pub struct TransactionType {
     pub name: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct TransactionTypeUpsert {
+    pub code: String,
+    pub name: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -27,5 +33,16 @@ mod tests {
         assert_eq!(transaction_type.id, deserialized.id);
         assert_eq!(transaction_type.code, deserialized.code);
         assert_eq!(transaction_type.name, deserialized.name);
+    }
+
+    #[test]
+    fn test_transaction_type_upsert() {
+        let payload = TransactionTypeUpsert {
+            code: "PAYMENT".to_string(),
+            name: "Payment".to_string(),
+        };
+
+        assert_eq!(payload.code, "PAYMENT");
+        assert_eq!(payload.name, "Payment");
     }
 }

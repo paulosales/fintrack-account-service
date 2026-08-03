@@ -47,6 +47,9 @@ The server runs on `http://0.0.0.0:3001`.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/transaction-types` | List all transaction types |
+| POST | `/transaction-types` | Create a transaction type |
+| PUT | `/transaction-types/{id}` | Update a transaction type |
+| DELETE | `/transaction-types/{id}` | Delete a transaction type |
 
 ### Budgets
 | Method | Path | Description |
